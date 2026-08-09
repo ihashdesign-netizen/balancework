@@ -5,7 +5,7 @@
     "buildCommand": "pip install -r requirements.txt"
   },
   "deploy": {
-    "startCommand": "gunicorn balancework.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120",
+    "startCommand": "sh -c \"python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn balancework.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120\"",
     "healthcheckPath": "/",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
