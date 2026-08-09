@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Demander un devis gratuit en ligne | {{ site_name }}{% endblock %}
+{% block description %}Demandez un devis gratuit en ligne. Réponse automatique immédiate et devis détaillé sous 24h ouvrées par notre cabinet en Tunisie.{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container form-card">
+    <h2 class="section-title">Demande de devis</h2>
+    <p class="section-sub">Remplissez ce formulaire : vous recevrez un e-mail de confirmation automatique avec votre numéro de suivi, puis un devis détaillé sous 24h ouvrées.</p>
+
+    <div id="devis-alert" class="alert"></div>
+
+    <form id="devis-form" class="card" novalidate>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="name">Nom complet *</label>
+          <input id="name" name="name" required placeholder="Votre nom et prénom" />
+        </div>
+        <div class="form-group">
+          <label for="email">E-mail *</label>
+          <input id="email" name="email" type="email" required placeholder="vous@entreprise.tn" />
+        </div>
+        <div class="form-group">
+          <label for="phone">Téléphone</label>
+          <input id="phone" name="phone" type="tel" placeholder="+216 XX XXX XXX" />
+        </div>
+        <div class="form-group">
+          <label for="company">Société</label>
+          <input id="company" name="company" placeholder="Nom de votre société" />
+        </div>
+        <div class="form-group">
+          <label for="service">Service concerné</label>
+          <select id="service" name="service" data-services>
+            <option value="">— Choisir un service —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="budget">Budget estimé</label>
+          <select id="budget" name="budget">
+            <option value="">— Sélectionner —</option>
+            <option>Moins de 200 TND / mois</option>
+            <option>200 – 500 TND / mois</option>
+            <option>500 – 1000 TND / mois</option>
+            <option>Plus de 1000 TND / mois</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label for="details">Détails de votre besoin</label>
+          <textarea id="details" name="details" placeholder="Décrivez votre situation : type de société, effectif, volume d'opérations, prestations souhaitées…"></textarea>
+        </div>
+      </div>
+      <p class="form-note">* Champs obligatoires. Vos données restent confidentielles.</p>
+      <button class="btn btn-lg btn-block" type="submit" style="margin-top:8px">Envoyer ma demande de devis</button>
+    </form>
+  </div>
+</section>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+  const params = new URLSearchParams(location.search);
+  const service = params.get("service");
+  if (service) {
+    document.addEventListener("DOMContentLoaded", () => {
+      const sel = document.getElementById("service");
+      const check = setInterval(() => {
+        if (sel.options.length > 1) { clearInterval(check); sel.value = service; }
+      }, 300);
+    });
+  }
+</script>
+{% endblock %}

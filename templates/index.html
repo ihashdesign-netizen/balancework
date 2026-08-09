@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ site_name }} — Conseil fiscal, gestion &amp; études de projets en Tunisie{% endblock %}
+{% block content %}
+
+<header class="hero">
+  <div class="hero-grid">
+    <div>
+      <h1>Expertise fiscale &amp; conseil. Votre sécurité, notre priorité.</h1>
+      <p>Cabinet tunisien d'expert conseiller fiscal : conseil et optimisation fiscale, déclarations, paie, sécurité sociale et suivi de vos dossiers en temps réel.</p>
+      <div class="hero-actions">
+        <a class="btn btn-lg" href="{% url 'devis' %}">Demander un devis</a>
+        <a class="btn btn-lg btn-secondary" href="{% url 'rendezvous' %}">Prendre rendez-vous</a>
+      </div>
+      <div class="hero-stats">
+        <div><strong>24h</strong><span>Réponse devis</span></div>
+        <div><strong>100%</strong><span>Conformité fiscale</span></div>
+        <div><strong>9</strong><span>Pôles d'expertise</span></div>
+      </div>
+    </div>
+    <div class="hero-card">
+      <h3>Demande de devis en ligne</h3>
+      <p>Remplissez le formulaire, recevez une réponse automatique immédiate et un devis détaillé sous 24h ouvrées.</p>
+      <a class="btn btn-block" href="{% url 'devis' %}">Commencer</a>
+      <p style="margin-top:14px;font-size:13px;color:#64748b">Ou appelez-nous : <a href="tel:{{ site_phone_raw }}">{{ site_phone }}</a></p>
+    </div>
+  </div>
+</header>
+
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">Nos services</h2>
+    <p class="section-sub">Conseil fiscal, fiscalité, déclarations, gestion sociale, suivi en temps réel et facturation électronique : nous couvrons l'ensemble de vos obligations.</p>
+    <div class="grid-3" id="services-grid"><p>Chargement…</p></div>
+  </div>
+</section>
+
+<section class="section" style="background:#fff">
+  <div class="container">
+    <h2 class="section-title">Comment ça marche ?</h2>
+    <p class="section-sub">Un processus simple et transparent, de la demande à la confirmation.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Remplissez le formulaire</h3>
+        <p>Devis, message ou rendez-vous : indiquez vos besoins en quelques clics.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Réponse automatique</h3>
+        <p>Recevez immédiatement un e-mail de confirmation avec votre numéro de suivi.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Un conseiller vous contacte</h3>
+        <p>Notre équipe analyse votre demande et vous rappelle sous 24h ouvrées.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h3>Vous validez</h3>
+        <p>Recevez votre devis détaillé et validez la prise en charge de votre dossier.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container" style="text-align:center">
+    <h2 class="section-title">Prêt à sécuriser vos finances ?</h2>
+    <p class="section-sub" style="margin-left:auto;margin-right:auto">Contactez-nous dès aujourd'hui pour un premier échange sans engagement.</p>
+    <a class="btn btn-lg" href="{% url 'contact' %}">Nous contacter</a>
+  </div>
+</section>
+
+{% endblock %}
+{% block extra_js %}<script>BalanceSite.loadServices("services-grid");</script>{% endblock %}

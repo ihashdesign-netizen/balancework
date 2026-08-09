@@ -1,0 +1,58 @@
+{% load static %}<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ site_name }} — Cabinet de conseil fiscal, gestion &amp; études de projets en Tunisie{% endblock %}</title>
+  <meta name="description" content="{% block description %}Cabinet de conseil fiscal, gestion et études de projets en Tunisie. Devis rapide, rendez-vous en ligne, réponse automatique par e-mail.{% endblock %}" />
+
+  <link rel="canonical" href="{{ site_url }}{% block canonical %}{% endblock %}" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="fr_TN" />
+  <meta property="og:site_name" content="{{ site_name }}" />
+  <meta property="og:title" content="{% block og_title %}{{ site_name }} — Cabinet de conseil fiscal, gestion &amp; études de projets en Tunisie{% endblock %}" />
+  <meta property="og:description" content="{% block og_description %}Conseil fiscal, gestion et études de projets en Tunisie. Devis et rendez-vous en ligne.{% endblock %}" />
+  <meta property="og:url" content="{{ site_url }}" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="{{ site_name }}" />
+  <meta name="twitter:description" content="Conseil fiscal, gestion et études de projets en Tunisie." />
+
+  <meta name="theme-color" content="#0f766e" />
+  <meta name="robots" content="index, follow" />
+
+  <link rel="stylesheet" href="{% static 'css/style.css' %}" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "AccountingService",
+    "name": "{{ site_name }}",
+    "description": "Cabinet de conseil fiscal, gestion et études de projets en Tunisie.",
+    "telephone": "{{ site_phone }}",
+    "email": "{{ site_email }}",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "{{ site_address }}",
+      "addressLocality": "El Hamma",
+      "addressRegion": "Gabès",
+      "postalCode": "6030",
+      "addressCountry": "TN"
+    },
+    "priceRange": "$$",
+    "openingHours": "Mo-Fr 08:30-17:30",
+    "sameAs": []
+  }
+  </script>
+</head>
+<body>
+  <div id="site-header"></div>
+
+  {% block content %}{% endblock %}
+
+  <div id="site-footer"></div>
+
+  <script src="{% static 'js/main.js' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

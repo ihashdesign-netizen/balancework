@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Espace administrateur | {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">Espace administrateur</h2>
+    <p class="section-sub">Gérez les demandes de devis, messages et rendez-vous reçus via le site.</p>
+
+    <div id="login-box" class="card admin-login">
+      <h3 style="margin:0 0 8px">Connexion</h3>
+      <p style="color:#64748b;font-size:14px;margin:0 0 16px">Saisissez le jeton d'administration.</p>
+      <input id="token-input" type="password" placeholder="Jeton administrateur" style="margin-bottom:12px" />
+      <button class="btn btn-block" onclick="BalanceAdmin.login()">Se connecter</button>
+      <div id="login-error" class="alert" style="margin-top:14px"></div>
+    </div>
+
+    <div id="admin-panel" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <div class="admin-tabs" style="margin:0">
+          <button data-tab="devis_requests" class="active" onclick="BalanceAdmin.switchTab('devis_requests')">Devis</button>
+          <button data-tab="appointments" onclick="BalanceAdmin.switchTab('appointments')">Rendez-vous</button>
+          <button data-tab="messages" onclick="BalanceAdmin.switchTab('messages')">Messages</button>
+        </div>
+        <button class="btn btn-outline" onclick="BalanceAdmin.logout()">Déconnexion</button>
+      </div>
+      <div id="tab-content"><p>Chargement…</p></div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+{% block extra_js %}<script src="{% static 'js/admin.js' %}"></script>{% endblock %}

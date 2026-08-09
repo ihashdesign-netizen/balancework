@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Nos services — Conseil fiscal, gestion &amp; études de projets | {{ site_name }}{% endblock %}
+{% block description %}Conseil fiscal, gestion, études de projets, déclarations &amp; dépôts, suivi de dossier, gestion du personnel, vente/achat, suivi en temps réel et facturation électronique TEJ en Tunisie.{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">Nos services</h2>
+    <p class="section-sub">Conseil fiscal, gestion et études de projets : nous prenons en charge l'ensemble de vos obligations et de vos projets en Tunisie.</p>
+    <div class="grid-3" id="services-grid"><p>Chargement…</p></div>
+  </div>
+</section>
+
+<section class="section" style="background:#fff">
+  <div class="container">
+    <h2 class="section-title">Besoin d'un accompagnement personnalisé ?</h2>
+    <p class="section-sub">Chaque entreprise est unique. Décrivez-nous votre situation et nous vous proposerons la solution adaptée.</p>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Devis gratuit</h3>
+        <p>Décrivez vos besoins, recevez une réponse automatique immédiate et un devis détaillé sous 24h ouvrées.</p>
+        <a class="btn" href="{% url 'devis' %}">Demander un devis</a>
+      </div>
+      <div class="card">
+        <h3>Rendez-vous en ligne</h3>
+        <p>Choisissez votre créneau dans nos disponibilités et recevez une confirmation par e-mail.</p>
+        <a class="btn" href="{% url 'rendezvous' %}">Prendre rendez-vous</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+{% block extra_js %}<script>BalanceSite.loadServices("services-grid");</script>{% endblock %}

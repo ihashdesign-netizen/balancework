@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Contact | {{ site_name }} — Cabinet de conseil fiscal à El Hamma, Gabès{% endblock %}
+{% block description %}Contactez {{ site_name }} : téléphone, e-mail et formulaire en ligne. Réponse automatique immédiate par e-mail.{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container">
+    <div class="grid-2">
+      <div class="card contact-card">
+        <h2 class="section-title">Nos coordonnées</h2>
+        <p>Un conseiller vous répond du lundi au vendredi, de 8h30 à 17h30.</p>
+
+        <div class="contact-item">
+          <div>
+            <strong>Téléphone</strong>
+            <span><a href="tel:{{ site_phone_raw }}">{{ site_phone }}</a></span>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div>
+            <strong>E-mail</strong>
+            <span><a href="mailto:{{ site_email }}">{{ site_email }}</a></span>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div>
+            <strong>Adresse</strong>
+            <span>{{ site_address }}</span>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div>
+            <strong>Horaires</strong>
+            <span>{{ site_hours }}</span>
+          </div>
+        </div>
+
+        <a class="btn" href="{% url 'rendezvous' %}" style="margin-top:8px">Prendre rendez-vous</a>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title" style="font-size:24px">Envoyez-nous un message</h2>
+        <p class="section-sub" style="margin-bottom:20px">Vous recevrez une réponse automatique immédiate par e-mail, puis une réponse personnalisée de notre équipe.</p>
+
+        <div id="contact-alert" class="alert"></div>
+
+        <form id="contact-form" novalidate>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="name">Nom complet *</label>
+              <input id="name" name="name" required placeholder="Votre nom" />
+            </div>
+            <div class="form-group">
+              <label for="email">E-mail *</label>
+              <input id="email" name="email" type="email" required placeholder="vous@exemple.com" />
+            </div>
+            <div class="form-group full">
+              <label for="phone">Téléphone</label>
+              <input id="phone" name="phone" type="tel" placeholder="+216 XX XXX XXX" />
+            </div>
+            <div class="form-group full">
+              <label for="subject">Sujet</label>
+              <input id="subject" name="subject" placeholder="Objet de votre message" />
+            </div>
+            <div class="form-group full">
+              <label for="message">Message *</label>
+              <textarea id="message" name="message" required placeholder="Votre message…"></textarea>
+            </div>
+          </div>
+          <button class="btn btn-lg btn-block" type="submit">Envoyer le message</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

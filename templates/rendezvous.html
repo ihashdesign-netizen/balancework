@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Prendre rendez-vous en ligne | {{ site_name }}{% endblock %}
+{% block description %}Prenez rendez-vous en ligne avec nos experts en conseil fiscal, gestion et études de projets. Confirmation automatique par e-mail.{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container form-card">
+    <h2 class="section-title">Prendre rendez-vous</h2>
+    <p class="section-sub">Choisissez une date et un créneau disponibles. Vous recevrez une confirmation automatique par e-mail, et un conseiller vous rappellera pour valider le rendez-vous.</p>
+
+    <div id="rdv-alert" class="alert"></div>
+
+    <form id="rendezvous-form" class="card" novalidate>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="rdv-name">Nom complet *</label>
+          <input id="rdv-name" name="name" required placeholder="Votre nom et prénom" />
+        </div>
+        <div class="form-group">
+          <label for="rdv-email">E-mail *</label>
+          <input id="rdv-email" name="email" type="email" required placeholder="vous@exemple.com" />
+        </div>
+        <div class="form-group full">
+          <label for="rdv-phone">Téléphone</label>
+          <input id="rdv-phone" name="phone" type="tel" placeholder="+216 XX XXX XXX" />
+        </div>
+        <div class="form-group full">
+          <label for="rdv-service">Motif du rendez-vous</label>
+          <select id="rdv-service" name="service" data-services>
+            <option value="">— Choisir un service —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="rdv-date">Date souhaitée *</label>
+          <input id="rdv-date" name="date" type="date" required min="" />
+        </div>
+        <div class="form-group">
+          <label for="rdv-time">Créneau</label>
+          <input id="rdv-time" name="time" type="hidden" />
+          <div id="slot-wrap">
+            <p class="form-note">Sélectionnez d'abord une date pour voir les créneaux disponibles.</p>
+          </div>
+        </div>
+        <div class="form-group full">
+          <label for="rdv-notes">Notes</label>
+          <textarea id="rdv-notes" name="notes" placeholder="Précisions utiles sur l'objet du rendez-vous (optionnel)"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-lg btn-block" type="submit">Confirmer ma demande de rendez-vous</button>
+    </form>
+  </div>
+</section>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+  const today = new Date();
+  today.setDate(today.getDate() + 1);
+  document.getElementById("rdv-date").min = today.toISOString().split("T")[0];
+</script>
+{% endblock %}
