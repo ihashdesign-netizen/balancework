@@ -141,7 +141,7 @@ ADMIN_TOKEN = env("ADMIN_TOKEN", "")
 if not DEBUG:
     # Le trafic HTTPS arrive via Cloudflare (proxy)
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT", "0") == "1"
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
