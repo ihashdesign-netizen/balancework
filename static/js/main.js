@@ -76,7 +76,7 @@ function injectFooter() {
           <p>Rue Allala El Fessi, El Hamma, Gabès, Tunisie</p>
         </div>
       </div>
-      <div class="footer-bottom">© ${new Date().getFullYear()} ${SITE.name} — Tunis, Tunisie. Tous droits réservés.</div>
+      <div class="footer-bottom">© ${new Date().getFullYear()} ${SITE.name} — Tunis, Tunisie. Tous droits réservés. — <a href="https://pixelsoftwaredesign.xyz" rel="noopener" target="_blank">PixelSoftwareDesign</a></div>
     </footer>`;
 }
 

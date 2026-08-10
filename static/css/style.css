@@ -252,6 +252,8 @@ textarea { min-height: 130px; resize: vertical; }
 .site-footer a:hover { color: #fff; }
 .site-footer p { font-size: 14px; margin: 0; }
 .footer-bottom { border-top: 1px solid rgba(255, 255, 255, 0.08); margin-top: 40px; padding-top: 20px; text-align: center; font-size: 13px; }
+.footer-bottom a { display: inline; color: #60a5fa; margin: 0; font-weight: 600; }
+.footer-bottom a:hover { color: #fff; }
 
 /* ---------- Badge / misc ---------- */
 .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
