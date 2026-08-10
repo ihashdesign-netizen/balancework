@@ -256,6 +256,11 @@ textarea { min-height: 130px; resize: vertical; }
 .footer-bottom a:hover { color: #fff; }
 
 /* ---------- Badge / misc ---------- */
+.checklist { list-style: none; padding: 0; margin: 10px 0 0; }
+.checklist li { padding: 8px 0 8px 28px; position: relative; font-size: 14px; }
+.checklist li::before { content: "✓"; position: absolute; left: 0; top: 8px; color: var(--accent, #2563eb); font-weight: 700; }
+.card h3 { margin-top: 0; }
+.card p:last-child { margin-bottom: 0; }
 .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .badge.nouveau { background: #fef3c7; color: #92400e; }
 .badge.confirme { background: #d1fae5; color: #065f46; }
