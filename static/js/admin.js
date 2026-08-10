@@ -7,6 +7,8 @@ const BalanceAdmin = (() => {
     devis_requests: ["nouveau", "en_cours", "traite", "annule"],
     appointments: ["confirme", "en_attente", "annule"],
     messages: ["nouveau", "traite", "annule"],
+    payments: ["en_attente", "partiel", "paye", "retard", "annule"],
+    service_followups: ["en_attente", "en_cours", "termine", "cloture", "annule"],
   };
 
   function token() {
@@ -95,6 +97,39 @@ const BalanceAdmin = (() => {
       { key: "subject", label: "Sujet" },
       { key: "message", label: "Message" },
       { key: "status", label: "Statut" },
+    ],
+    clients: [
+      { key: "id", label: "N°" },
+      { key: "name", label: "Nom" },
+      { key: "email", label: "E-mail" },
+      { key: "phone", label: "Tél." },
+      { key: "company", label: "Société" },
+      { key: "notes", label: "Notes" },
+      { key: "created_at", label: "Ajouté le" },
+    ],
+    payments: [
+      { key: "id", label: "N°" },
+      { key: "client_name", label: "Client" },
+      { key: "amount", label: "Montant (TND)" },
+      { key: "date", label: "Date" },
+      { key: "status", label: "Statut" },
+      { key: "method", label: "Mode" },
+      { key: "notes", label: "Notes" },
+    ],
+    service_followups: [
+      { key: "id", label: "N°" },
+      { key: "client_name", label: "Client" },
+      { key: "service_title", label: "Service" },
+      { key: "status", label: "Statut" },
+      { key: "start_date", label: "Début" },
+      { key: "due_date", label: "Échéance" },
+      { key: "notes", label: "Notes" },
+    ],
+    types_service: [
+      { key: "id", label: "N°" },
+      { key: "title", label: "Service" },
+      { key: "slug", label: "Identifiant" },
+      { key: "short_desc", label: "Résumé" },
     ],
   };
 

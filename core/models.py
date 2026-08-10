@@ -111,3 +111,90 @@ class Appointment(models.Model):
     @property
     def service_title(self):
         return self.service.title if self.service else "—"
+
+
+class Client(models.Model):
+    """Client du cabinet (espace admin)."""
+
+    name = models.CharField(max_length=120, verbose_name="Nom")
+    email = models.EmailField(blank=True, verbose_name="E-mail")
+    phone = models.CharField(max_length=30, blank=True, verbose_name="Téléphone")
+    company = models.CharField(max_length=120, blank=True, verbose_name="Société")
+    notes = models.TextField(blank=True, verbose_name="Notes")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Ajouté le")
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Client"
+        verbose_name_plural = "Clients"
+
+    def __str__(self):
+        return f"{self.name} ({self.company or '—'})"
+
+
+class Payment(models.Model):
+    """Paiement d'un client."""
+
+    STATUS_CHOICES = [
+        ("en_attente", "En attente"),
+        ("partiel", "Partiel"),
+        ("paye", "Payé"),
+        ("retard", "En retard"),
+        ("annule", "Annulé"),
+    ]
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, verbose_name="Client")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Montant (TND)")
+    date = models.DateField(verbose_name="Date")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="en_attente", verbose_name="Statut")
+    method = models.CharField(max_length=80, blank=True, verbose_name="Mode de paiement")
+    notes = models.TextField(blank=True, verbose_name="Notes")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
+
+    class Meta:
+        ordering = ["-date", "-id"]
+        verbose_name = "Paiement"
+        verbose_name_plural = "Paiements"
+
+    def __str__(self):
+        return f"{self.amount} TND — {self.client.name} ({self.date})"
+
+    @property
+    def client_name(self):
+        return self.client.name
+
+
+class ServiceFollowUp(models.Model):
+    """Suivi d'un service souscrit par un client."""
+
+    STATUS_CHOICES = [
+        ("en_attente", "En attente"),
+        ("en_cours", "En cours"),
+        ("termine", "Terminé"),
+        ("cloture", "Clôturé"),
+        ("annule", "Annulé"),
+    ]
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, verbose_name="Client")
+    service = models.ForeignKey(
+        Service, null=True, blank=True, on_delete=models.SET_NULL, verbose_name="Service"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="en_attente", verbose_name="Statut")
+    start_date = models.DateField(null=True, blank=True, verbose_name="Date de début")
+    due_date = models.DateField(null=True, blank=True, verbose_name="Échéance")
+    notes = models.TextField(blank=True, verbose_name="Notes")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Suivi de service"
+        verbose_name_plural = "Suivis de service"
+
+    def __str__(self):
+        return f"{self.client.name} — {self.service or '—'}"
+
+    @property
+    def client_name(self):
+        return self.client.name
+
+    @property
+    def service_title(self):
+        return self.service.title if self.service else "—"

@@ -7,7 +7,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import Appointment, DevisRequest, Message, Service
+from .models import Appointment, Client, DevisRequest, Message, Payment, Service, ServiceFollowUp
 from .mail import send_auto_reply_and_notify
 
 OPENING_HOURS = range(9, 17)
@@ -221,6 +221,10 @@ TABLES = {
     "devis_requests": (DevisRequest, ["id", "name", "email", "phone", "company", "budget", "details", "status", "created_at"], "service_title"),
     "appointments": (Appointment, ["id", "name", "email", "phone", "date", "time", "notes", "status"], "service_title"),
     "messages": (Message, ["id", "name", "email", "phone", "subject", "message", "status", "created_at"], None),
+    "clients": (Client, ["id", "name", "email", "phone", "company", "notes", "created_at"], None),
+    "payments": (Payment, ["id", "client_name", "amount", "date", "status", "method", "notes", "created_at"], None),
+    "service_followups": (ServiceFollowUp, ["id", "client_name", "service_title", "status", "start_date", "due_date", "notes", "created_at"], None),
+    "types_service": (Service, ["id", "title", "slug", "short_desc"], None),
 }
 
 
@@ -249,7 +253,7 @@ def api_admin(request, table):
         except (ValueError, model.DoesNotExist):
             return _json({"ok": False, "error": "Élément introuvable"}, 404)
         status = body.get("status", "")
-        valid = {s for s, _ in obj.STATUS_CHOICES}
+        valid = {s for s, _ in getattr(obj, "STATUS_CHOICES", [])}
         if status not in valid:
             return _json({"ok": False, "error": "Statut invalide"}, 400)
         obj.status = status
