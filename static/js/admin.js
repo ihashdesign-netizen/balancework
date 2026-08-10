@@ -1,4 +1,5 @@
 const BalanceAdmin = (() => {
+  const API_BASE = window.BALANCEWORK_API || "";
   const TOKEN_KEY = "bts_admin_token";
   let currentTab = "devis_requests";
 
@@ -13,7 +14,7 @@ const BalanceAdmin = (() => {
   }
 
   async function api(path, options = {}) {
-    const res = await fetch(path, {
+    const res = await fetch(API_BASE + path, {
       ...options,
       headers: {
         "Content-Type": "application/json",

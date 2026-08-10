@@ -1,3 +1,5 @@
+const API_BASE = window.BALANCEWORK_API || "";
+
 const SITE = {
   name: "Balance And Tax Safety",
   phone: "+216 97 903 529",
@@ -106,7 +108,7 @@ async function postForm(formEl, endpoint, alertId) {
   btn.textContent = "Envoi en cours…";
   try {
     const data = Object.fromEntries(new FormData(formEl).entries());
-    const res = await fetch(endpoint, {
+    const res = await fetch(API_BASE + endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -186,7 +188,7 @@ function setupForms() {
 
 async function loadSlots(date) {
   try {
-    const res = await fetch(`/api/availability?date=${date}`);
+    const res = await fetch(API_BASE + `/api/availability?date=${date}`);
     const data = await res.json();
     return data.slots || [];
   } catch {
@@ -197,7 +199,7 @@ async function loadSlots(date) {
 async function initServiceSelects() {
   const selects = document.querySelectorAll("[data-services]");
   if (!selects.length) return;
-  const res = await fetch("/api/services");
+  const res = await fetch(API_BASE + "/api/services");
   const data = await res.json();
   const services = data.services || [];
   selects.forEach((sel) => {
@@ -213,7 +215,7 @@ async function initServiceSelects() {
 async function loadServices(targetId) {
   const wrap = document.getElementById(targetId);
   if (!wrap) return;
-  const res = await fetch("/api/services");
+  const res = await fetch(API_BASE + "/api/services");
   const data = await res.json();
   const icons = { scale: "scale", calculator: "calculator", shield: "shield", briefcase: "briefcase", file: "file", eye: "eye", users: "users", cart: "cart", trending: "trending", link: "link", "user-check": "user-check", rocket: "rocket", target: "target" };
   wrap.innerHTML = (data.services || [])
