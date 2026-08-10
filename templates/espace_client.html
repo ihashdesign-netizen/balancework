@@ -114,6 +114,14 @@
   </div>
 </section>
 
+<div id="prefacture-overlay" class="overlay" style="display:none" onclick="if(event.target===this)BalanceClient.closePrefacture()">
+  <div class="overlay-card pf-wrap">
+    <button class="overlay-close" onclick="BalanceClient.closePrefacture()">×</button>
+    <div id="prefacture-html"></div>
+    <button class="btn" onclick="BalanceClient.printPrefacture()">Imprimer / PDF</button>
+  </div>
+</div>
+
 {% endblock %}
 {% block extra_js %}
 <script src="{% static 'js/client.js' %}"></script>

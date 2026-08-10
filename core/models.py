@@ -117,6 +117,10 @@ class Appointment(models.Model):
 class Client(models.Model):
     """Client du cabinet (espace admin + espace client)."""
 
+    STATUT_CHOICES = [
+        ("entreprise", "Entreprise"),
+        ("personne_physique", "Personne physique"),
+    ]
     user = models.OneToOneField(
         User, null=True, blank=True, on_delete=models.CASCADE, verbose_name="Compte utilisateur"
     )
@@ -124,7 +128,9 @@ class Client(models.Model):
     prenom = models.CharField(max_length=120, blank=True, verbose_name="Prénom")
     email = models.EmailField(verbose_name="E-mail")
     phone = models.CharField(max_length=30, blank=True, verbose_name="Téléphone")
-    company = models.CharField(max_length=120, blank=True, verbose_name="Société")
+    company = models.CharField(max_length=120, blank=True, verbose_name="Raison sociale")
+    adresse = models.CharField(max_length=255, blank=True, verbose_name="Adresse")
+    statut_client = models.CharField(max_length=30, choices=STATUT_CHOICES, default="entreprise", verbose_name="Type de client")
     matricule_fiscale = models.CharField(max_length=100, blank=True, verbose_name="Matricule fiscale")
     cin = models.CharField(max_length=8, blank=True, verbose_name="Numéro de carte d'identité")
     notes = models.TextField(blank=True, verbose_name="Notes")
@@ -137,6 +143,12 @@ class Client(models.Model):
 
     def __str__(self):
         return f"{self.prenom or self.name} {self.name} ({self.company or self.matricule_fiscale or '—'})"
+
+    @property
+    def display_name(self):
+        if self.statut_client == "entreprise" and self.company:
+            return self.company
+        return f"{self.prenom} {self.name}".strip()
 
 
 class ClientServiceSuivi(models.Model):
@@ -152,14 +164,22 @@ class ClientServiceSuivi(models.Model):
         ("valide", "Validé / déposé / conforme"),
         ("cloture", "Clôturé"),
     ]
+    FREQUENCE_CHOICES = [
+        ("ponctuel", "Ponctuel"),
+        ("mensuel", "Mensuel"),
+        ("trimestriel", "Trimestriel"),
+        ("semestriel", "Semestriel"),
+        ("annuel", "Annuel"),
+    ]
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="services", verbose_name="Client")
     type_service = models.ForeignKey(
         Service, null=True, blank=True, on_delete=models.PROTECT, verbose_name="Type de service"
     )
-    montant = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name="Montant (TND)")
+    montant = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name="Prix (TND)")
     statut_paiement = models.CharField(max_length=20, choices=STATUT_PAIEMENT_CHOICES, default="en_attente", verbose_name="Statut de paiement")
     statut_service = models.CharField(max_length=20, choices=STATUT_SERVICE_CHOICES, default="en_cours", verbose_name="Suivi du service")
     date_echeance = models.DateField(null=True, blank=True, verbose_name="Échéance fiscale / sociale")
+    frequence = models.CharField(max_length=20, choices=FREQUENCE_CHOICES, default="ponctuel", verbose_name="Répétition du service")
     commentaire = models.TextField(blank=True, verbose_name="Notes / remarques (ex : accusé TEJ)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
 
@@ -178,6 +198,140 @@ class ClientServiceSuivi(models.Model):
     @property
     def service_title(self):
         return self.type_service.title if self.type_service else "—"
+
+
+class DossierTask(models.Model):
+    """Tâche liée à un dossier client."""
+
+    STATUT_CHOICES = [
+        ("a_faire", "À faire"),
+        ("en_cours", "En cours"),
+        ("termine", "Terminé"),
+    ]
+    REPETITION_CHOICES = [
+        ("ponctuel", "Ponctuel"),
+        ("mensuel", "Mensuel"),
+        ("trimestriel", "Trimestriel"),
+        ("semestriel", "Semestriel"),
+        ("annuel", "Annuel"),
+    ]
+    dossier = models.ForeignKey(ClientServiceSuivi, on_delete=models.CASCADE, related_name="tasks", verbose_name="Dossier")
+    titre = models.CharField(max_length=200, verbose_name="Titre")
+    description = models.TextField(blank=True, verbose_name="Description")
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default="a_faire", verbose_name="Statut")
+    date_echeance = models.DateField(null=True, blank=True, verbose_name="Échéance")
+    repetition = models.CharField(max_length=20, choices=REPETITION_CHOICES, default="ponctuel", verbose_name="Répétition")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créée le")
+
+    class Meta:
+        ordering = ["date_echeance", "id"]
+        verbose_name = "Tâche de dossier"
+        verbose_name_plural = "Tâches de dossiers"
+
+    def __str__(self):
+        return f"{self.dossier} — {self.titre}"
+
+    @property
+    def client_name(self):
+        return self.dossier.client.name
+
+    @property
+    def dossier_service(self):
+        return self.dossier.service_title
+
+
+class Prefacture(models.Model):
+    """Préfacture / proforma émise pour un dossier client."""
+
+    STATUT_CHOICES = [
+        ("emise", "Émise"),
+        ("payee", "Payée"),
+        ("annulee", "Annulée"),
+    ]
+    dossier = models.ForeignKey(ClientServiceSuivi, on_delete=models.CASCADE, related_name="prefactures", verbose_name="Dossier")
+    numero = models.CharField(max_length=30, unique=True, verbose_name="Numéro")
+    date = models.DateField(verbose_name="Date")
+    montant_ht = models.DecimalField(max_digits=10, decimal_places=3, verbose_name="Montant HT (TND)")
+    taux_tva = models.DecimalField(max_digits=5, decimal_places=2, default=19.00, verbose_name="Taux TVA (%)")
+    montant_ttc = models.DecimalField(max_digits=10, decimal_places=3, verbose_name="Montant TTC (TND)")
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default="emise", verbose_name="Statut")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créée le")
+
+    class Meta:
+        ordering = ["-date", "-id"]
+        verbose_name = "Préfacture"
+        verbose_name_plural = "Préfactures"
+
+    def __str__(self):
+        return f"{self.numero} — {self.montant_ttc} TND"
+
+    @property
+    def client_name(self):
+        return self.dossier.client_name
+
+    @property
+    def dossier_service(self):
+        return self.dossier.service_title
+
+
+class DossierAttachment(models.Model):
+    """Fichier attaché à un dossier client (image, pdf, office, zip, audio, vidéo…)."""
+
+    UPLOADER_CHOICES = [
+        ("client", "Client"),
+        ("admin", "Cabinet"),
+    ]
+    dossier = models.ForeignKey(ClientServiceSuivi, on_delete=models.CASCADE, related_name="attachments", verbose_name="Dossier")
+    file = models.FileField(upload_to="attachments/%Y/%m/", verbose_name="Fichier")
+    original_name = models.CharField(max_length=255, verbose_name="Nom du fichier")
+    content_type = models.CharField(max_length=120, blank=True, verbose_name="Type MIME")
+    size = models.IntegerField(default=0, verbose_name="Taille (octets)")
+    uploaded_by = models.CharField(max_length=10, choices=UPLOADER_CHOICES, default="client", verbose_name="Ajouté par")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Ajouté le")
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Pièce jointe"
+        verbose_name_plural = "Pièces jointes"
+
+    def __str__(self):
+        return f"{self.original_name} ({self.dossier})"
+
+    @property
+    def client_name(self):
+        return self.dossier.client_name
+
+    @property
+    def dossier_service(self):
+        return self.dossier.service_title
+
+    @property
+    def category(self):
+        ext = self.original_name.rsplit(".", 1)[-1].lower() if "." in self.original_name else ""
+        image = {"jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"}
+        pdf = {"pdf"}
+        office = {"doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods"}
+        txt = {"txt", "csv", "rtf"}
+        archive = {"zip", "rar", "7z", "tar", "gz"}
+        audio = {"mp3", "wav", "ogg", "aac", "m4a"}
+        video = {"mp4", "mov", "mkv", "avi", "webm", "m4v"}
+        if ext in image: return "image"
+        if ext in pdf: return "pdf"
+        if ext in office: return "office"
+        if ext in txt: return "texte"
+        if ext in archive: return "archive"
+        if ext in audio: return "audio"
+        if ext in video: return "video"
+        return "autre"
+
+    @property
+    def size_display(self):
+        size = self.size
+        for unit in ("o", "Ko", "Mo", "Go"):
+            if size < 1024:
+                return f"{size:.0f} {unit}"
+            size /= 1024
+        return f"{size:.0f} Go"
 
 
 class ClientMessage(models.Model):

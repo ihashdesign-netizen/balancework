@@ -12,7 +12,10 @@ const BalanceAdmin = (() => {
     client_service_suivis: {
       statut_paiement: ["en_attente", "paye", "retard"],
       statut_service: ["en_cours", "valide", "cloture"],
+      frequence: ["ponctuel", "mensuel", "trimestriel", "semestriel", "annuel"],
     },
+    dossier_tasks: { statut: ["a_faire", "en_cours", "termine"], repetition: ["ponctuel", "mensuel", "trimestriel", "semestriel", "annuel"] },
+    prefactures: { statut: ["emise", "payee", "annulee"] },
   };
 
   function token() {
@@ -96,6 +99,22 @@ const BalanceAdmin = (() => {
       { name: "client", label: "Client *", type: "select", source: "/api/admin/clients", valueKey: "id", textKey: (c) => c.name },
       { name: "text", label: "Réponse au client *", type: "textarea" },
     ],
+    dossier_tasks: [
+      { name: "dossier", label: "Dossier *", type: "select", source: "/api/admin/client_service_suivis", valueKey: "id", textKey: (d) => d.client_name + " — " + d.service_title },
+      { name: "titre", label: "Titre de la tâche *", type: "text" },
+      { name: "description", label: "Description", type: "textarea" },
+      { name: "statut", label: "Statut", type: "select", options: ["a_faire", "en_cours", "termine"] },
+      { name: "date_echeance", label: "Échéance (AAAA-MM-JJ)", type: "date" },
+      { name: "repetition", label: "Répétition", type: "select", options: ["ponctuel", "mensuel", "trimestriel", "semestriel", "annuel"] },
+    ],
+    dossier_attachments: [
+      { name: "dossier", label: "Dossier *", type: "select", source: "/api/admin/client_service_suivis", valueKey: "id", textKey: (d) => d.client_name + " — " + d.service_title },
+      { name: "file", label: "Fichier *", type: "file" },
+    ],
+    prefactures: [
+      { name: "dossier", label: "Dossier *", type: "select", source: "/api/admin/client_service_suivis", valueKey: "id", textKey: (d) => d.client_name + " — " + d.service_title },
+      { name: "taux_tva", label: "Taux TVA (%)", type: "number", step: "0.01" },
+    ],
   };
 
   const COLUMNS = {
@@ -172,7 +191,36 @@ const BalanceAdmin = (() => {
       { key: "statut_paiement", label: "Paiement" },
       { key: "statut_service", label: "Dossier" },
       { key: "date_echeance", label: "Échéance" },
+      { key: "frequence", label: "Fréquence" },
       { key: "commentaire", label: "Notes" },
+    ],
+    dossier_tasks: [
+      { key: "id", label: "N°" },
+      { key: "client_name", label: "Client" },
+      { key: "dossier_service", label: "Dossier" },
+      { key: "titre", label: "Tâche" },
+      { key: "statut", label: "Statut" },
+      { key: "date_echeance", label: "Échéance" },
+      { key: "repetition", label: "Répétition" },
+    ],
+    prefactures: [
+      { key: "id", label: "N°" },
+      { key: "client_name", label: "Client" },
+      { key: "dossier_service", label: "Dossier" },
+      { key: "numero", label: "Numéro" },
+      { key: "date", label: "Date" },
+      { key: "montant_ttc", label: "TTC (TND)" },
+      { key: "statut", label: "Statut" },
+    ],
+    dossier_attachments: [
+      { key: "id", label: "N°" },
+      { key: "client_name", label: "Client" },
+      { key: "dossier_service", label: "Dossier" },
+      { key: "original_name", label: "Fichier" },
+      { key: "category", label: "Type" },
+      { key: "size", label: "Taille" },
+      { key: "uploaded_by", label: "Ajouté par" },
+      { key: "created_at", label: "Ajouté le" },
     ],
   };
 
@@ -200,13 +248,17 @@ const BalanceAdmin = (() => {
         const cells = cols
           .map((c) => {
             const value = item[c.key];
-            if (c.key === "status" || c.key === "statut_paiement" || c.key === "statut_service") {
+            if (c.key === "status" || c.key === "statut_paiement" || c.key === "statut_service" || c.key === "frequence" || c.key === "repetition" || (c.key === "statut" && tab !== "dossier_attachments")) {
               const opts = Array.isArray(STATUS_OPTIONS[tab])
                 ? STATUS_OPTIONS[tab]
                 : (STATUS_OPTIONS[tab] || {})[c.key] || [];
+              if (!opts.length) return `<td>${value == null || value === "" ? "—" : escapeHtml(String(value))}</td>`;
               return `<td><select class="status-select" data-table="${tab}" data-field="${c.key}" data-id="${item.id}" onchange="BalanceAdmin.updateStatus(this)">
-                ${opts.map((s) => `<option value="${s}" ${value === s ? "selected" : ""}>${s}</option>`).join("")}
+                ${opts.map((s) => `<option value="${s}" ${value === s ? "selected" : ""}>${s.replace("_", " ")}</option>`).join("")}
               </select></td>`;
+            }
+            if (c.key === "original_name" && item.url) {
+              return `<td><a href="${item.url}" target="_blank" rel="noopener">${escapeHtml(String(value))}</a></td>`;
             }
             return `<td>${value == null || value === "" ? "—" : escapeHtml(String(value))}</td>`;
           })
@@ -249,6 +301,9 @@ const BalanceAdmin = (() => {
     if (f.type === "textarea") {
       return `<textarea id="${id}" rows="2"></textarea>`;
     }
+    if (f.type === "file") {
+      return `<input id="${id}" type="file" required />`;
+    }
     return `<input id="${id}" type="${f.type}" ${f.step ? `step="${f.step}"` : ""} ${f.label.includes("*") ? "required" : ""} />`;
   }
 
@@ -289,17 +344,38 @@ const BalanceAdmin = (() => {
   async function submitCreate(e) {
     e.preventDefault();
     const cfg = CREATE_FORMS[currentTab];
+    const hasFile = cfg.some((f) => f.type === "file");
+    const fd = new FormData();
     const payload = {};
     for (const f of cfg) {
       const el = document.getElementById("cf-" + f.name);
-      payload[f.name] = el.value.trim();
-      if (f.label.includes("*") && !payload[f.name]) {
-        alert(`Champ requis : ${f.label}`);
-        return;
+      if (f.type === "file") {
+        if (!el.files.length) {
+          alert(`Champ requis : ${f.label}`);
+          return;
+        }
+        fd.append(f.name, el.files[0]);
+      } else {
+        payload[f.name] = el.value.trim();
+        if (f.label.includes("*") && !payload[f.name]) {
+          alert(`Champ requis : ${f.label}`);
+          return;
+        }
+        if (hasFile) fd.append(f.name, payload[f.name]);
       }
     }
     try {
-      await api(`/api/admin/${currentTab}`, { method: "POST", body: JSON.stringify(payload) });
+      if (hasFile) {
+        const res = await fetch(API_BASE + `/api/admin/${currentTab}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token()}` },
+          body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Erreur");
+      } else {
+        await api(`/api/admin/${currentTab}`, { method: "POST", body: JSON.stringify(payload) });
+      }
       document.getElementById("create-box").style.display = "none";
       document.getElementById("create-box").innerHTML = "";
       loadTab(currentTab);

@@ -2,6 +2,7 @@
 import json
 import secrets
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -17,14 +18,42 @@ from .models import (
     ClientMessage,
     ClientServiceSuivi,
     DevisRequest,
+    DossierAttachment,
+    DossierTask,
     Message,
     Payment,
+    Prefacture,
     Service,
     ServiceFollowUp,
 )
 from .mail import send_auto_reply_and_notify
 
 OPENING_HOURS = range(9, 17)
+
+ALLOWED_UPLOAD_EXTENSIONS = {
+    "image": {"jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"},
+    "pdf": {"pdf"},
+    "office": {"doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods"},
+    "texte": {"txt", "csv", "rtf"},
+    "archive": {"zip", "rar", "7z", "tar", "gz"},
+    "audio": {"mp3", "wav", "ogg", "aac", "m4a"},
+    "video": {"mp4", "mov", "mkv", "avi", "webm", "m4v"},
+}
+
+
+def _attachment_payload(att, request=None):
+    data = {
+        "id": att.id,
+        "name": att.original_name,
+        "category": att.category,
+        "size": att.size_display,
+        "uploaded_by": att.get_uploaded_by_display(),
+        "created_at": att.created_at.strftime("%d/%m/%Y"),
+        "url": att.file.url,
+    }
+    if request is not None:
+        data["url"] = request.build_absolute_uri(att.file.url)
+    return data
 
 
 def sitemap(request):
@@ -300,16 +329,74 @@ def api_client_dashboard(request):
         return _json({"ok": False, "error": "Non autorisé"}, 401)
     suivis = []
     for s in ClientServiceSuivi.objects.filter(client=client):
+        tasks = [
+            {
+                "id": t.id,
+                "titre": t.titre,
+                "statut": t.get_statut_display(),
+                "date_echeance": t.date_echeance.strftime("%d/%m/%Y") if t.date_echeance else "—",
+                "repetition": t.get_repetition_display(),
+            }
+            for t in s.tasks.all()
+        ]
+        prefactures = [
+            {"id": p.id, "numero": p.numero, "statut": p.get_statut_display()}
+            for p in s.prefactures.all()
+        ]
+        attachments = [_attachment_payload(a, request) for a in s.attachments.all()]
         suivis.append({
             "id": s.id,
             "service": s.service_title,
             "montant": str(s.montant),
+            "frequence": s.get_frequence_display(),
             "statut_paiement": s.get_statut_paiement_display(),
             "statut_service": s.get_statut_service_display(),
             "date_echeance": s.date_echeance.strftime("%d/%m/%Y") if s.date_echeance else "—",
             "commentaire": s.commentaire,
+            "tasks": tasks,
+            "prefactures": prefactures,
+            "attachments": attachments,
         })
     return _json({"ok": True, "client": _client_payload(client), "suivis": suivis})
+
+
+@csrf_exempt
+def api_client_prefacture(request, prefacture_id):
+    client = _client_from_request(request)
+    if not client:
+        return _json({"ok": False, "error": "Non autorisé"}, 401)
+    pf = Prefacture.objects.filter(pk=prefacture_id, dossier__client=client).first()
+    if not pf:
+        return _json({"ok": False, "error": "Préfacture introuvable"}, 404)
+    dossier = pf.dossier
+    return _json({
+        "ok": True,
+        "prefacture": {
+            "numero": pf.numero,
+            "date": pf.date.strftime("%d/%m/%Y"),
+            "montant_ht": str(pf.montant_ht),
+            "taux_tva": str(pf.taux_tva),
+            "montant_ttc": str(pf.montant_ttc),
+            "statut": pf.get_statut_display(),
+            "service": dossier.service_title,
+            "frequence": dossier.get_frequence_display(),
+            "description": dossier.commentaire,
+        },
+        "cabinet": {
+            "nom": settings.SITE_NAME,
+            "email": settings.SITE_EMAIL,
+            "telephone": settings.SITE_PHONE,
+            "adresse": settings.SITE_ADDRESS,
+            "matricule": "1574T (à compléter)",
+        },
+        "client": {
+            "nom": dossier.client.display_name,
+            "adresse": dossier.client.adresse,
+            "matricule_fiscale": dossier.client.matricule_fiscale,
+            "cin": dossier.client.cin,
+            "statut": dossier.client.get_statut_client_display(),
+        },
+    })
 
 
 def _client_payload(client):
@@ -346,6 +433,54 @@ def api_client_create_dossier(request):
         commentaire=description,
     )
     return _json({"ok": True, "id": obj.id, "message": "Dossier ouvert. Le cabinet vous répondra rapidement."})
+
+
+@csrf_exempt
+def api_client_attachments(request, dossier_id):
+    client = _client_from_request(request)
+    if not client:
+        return _json({"ok": False, "error": "Non autorisé"}, 401)
+    dossier = ClientServiceSuivi.objects.filter(pk=dossier_id, client=client).first()
+    if not dossier:
+        return _json({"ok": False, "error": "Dossier introuvable"}, 404)
+    if request.method != "POST":
+        return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
+    f = request.FILES.get("file")
+    if not f:
+        return _json({"ok": False, "error": "Aucun fichier reçu."}, 400)
+    if f.size > settings.MAX_UPLOAD_SIZE:
+        return _json({"ok": False, "error": "Fichier trop volumineux (20 Mo max)."}, 400)
+    name = f.name or "fichier"
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    allowed = {e for exts in ALLOWED_UPLOAD_EXTENSIONS.values() for e in exts}
+    if ext not in allowed:
+        return _json({"ok": False, "error": "Format non autorisé (image, pdf, Office, txt, zip, audio, vidéo)."}, 400)
+    att = DossierAttachment.objects.create(
+        dossier=dossier,
+        file=f,
+        original_name=name[:255],
+        content_type=f.content_type or "",
+        size=f.size,
+        uploaded_by="client",
+    )
+    return _json({"ok": True, "attachment": _attachment_payload(att, request), "message": "Fichier ajouté au dossier."})
+
+
+@csrf_exempt
+def api_client_attachment_delete(request, attachment_id):
+    client = _client_from_request(request)
+    if not client:
+        return _json({"ok": False, "error": "Non autorisé"}, 401)
+    att = DossierAttachment.objects.filter(pk=attachment_id, dossier__client=client).first()
+    if not att:
+        return _json({"ok": False, "error": "Fichier introuvable"}, 404)
+    if request.method != "DELETE":
+        return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
+    if att.uploaded_by != "client":
+        return _json({"ok": False, "error": "Seuls les fichiers ajoutés par vous peuvent être supprimés."}, 400)
+    att.file.delete(save=False)
+    att.delete()
+    return _json({"ok": True, "message": "Fichier supprimé."})
 
 
 @csrf_exempt
@@ -393,8 +528,11 @@ TABLES = {
     "payments": (Payment, ["id", "client_name", "amount", "date", "status", "method", "notes", "created_at"], None),
     "service_followups": (ServiceFollowUp, ["id", "client_name", "service_title", "status", "start_date", "due_date", "notes", "created_at"], None),
     "types_service": (Service, ["id", "title", "slug", "short_desc"], None),
-    "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "commentaire"], None),
+    "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "frequence", "commentaire"], None),
     "client_messages": (ClientMessage, ["id", "client_name", "direction", "text", "created_at"], None),
+    "dossier_tasks": (DossierTask, ["id", "client_name", "dossier_service", "titre", "statut", "date_echeance", "repetition"], None),
+    "prefactures": (Prefacture, ["id", "client_name", "dossier_service", "numero", "date", "montant_ht", "taux_tva", "montant_ttc", "statut"], None),
+    "dossier_attachments": (DossierAttachment, ["id", "client_name", "dossier_service", "original_name", "category", "size", "uploaded_by", "created_at"], None),
 }
 
 
@@ -413,6 +551,8 @@ def api_admin(request, table):
             item = {f: getattr(obj, f, "") for f in fields}
             if extra:
                 item[extra] = getattr(obj, extra, "—")
+            if table == "dossier_attachments":
+                item["url"] = request.build_absolute_uri(obj.file.url)
             items.append(item)
         return _json({"ok": True, "items": items})
 
@@ -424,20 +564,30 @@ def api_admin(request, table):
             return _json({"ok": False, "error": "Élément introuvable"}, 404)
         field = body.get("field", "status")
         value = body.get("status", "")
-        choices_attr = {
-            "status": "STATUS_CHOICES",
-            "statut_paiement": "STATUT_PAIEMENT_CHOICES",
-            "statut_service": "STATUT_SERVICE_CHOICES",
-        }.get(field)
-        if choices_attr:
-            valid = {s for s, _ in getattr(obj, choices_attr, [])}
+
+        def _valid_choices(obj, field):
+            if field in ("statut_paiement",):
+                return {s for s, _ in obj.STATUT_PAIEMENT_CHOICES}
+            if field in ("statut_service",):
+                return {s for s, _ in obj.STATUT_SERVICE_CHOICES}
+            if field in ("frequence",):
+                return {s for s, _ in obj.FREQUENCE_CHOICES}
+            if field in ("repetition",):
+                return {s for s, _ in obj.REPETITION_CHOICES}
+            if field in ("status", "statut"):
+                attr = "STATUT_CHOICES" if hasattr(obj, "STATUT_CHOICES") else "STATUS_CHOICES"
+                return {s for s, _ in getattr(obj, attr, [])}
+            return None
+
+        valid = _valid_choices(obj, field)
+        if valid is not None:
             if value not in valid:
                 return _json({"ok": False, "error": "Statut invalide"}, 400)
-        elif field == "montant":
+        elif field == "montant" or field == "taux_tva":
             try:
                 value = float(value)
             except ValueError:
-                return _json({"ok": False, "error": "Montant invalide"}, 400)
+                return _json({"ok": False, "error": "Valeur invalide"}, 400)
         elif field == "date_echeance":
             try:
                 date.fromisoformat(value)
@@ -460,6 +610,31 @@ def api_admin(request, table):
 
 
 def _api_admin_create(request, table):
+    if table == "dossier_attachments":
+        try:
+            dossier = ClientServiceSuivi.objects.get(pk=int(request.POST.get("dossier", 0)))
+        except (ValueError, ClientServiceSuivi.DoesNotExist):
+            return _json({"ok": False, "error": "Dossier introuvable."}, 400)
+        f = request.FILES.get("file")
+        if not f:
+            return _json({"ok": False, "error": "Aucun fichier reçu."}, 400)
+        if f.size > settings.MAX_UPLOAD_SIZE:
+            return _json({"ok": False, "error": "Fichier trop volumineux (20 Mo max)."}, 400)
+        name = f.name or "fichier"
+        ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        allowed = {e for exts in ALLOWED_UPLOAD_EXTENSIONS.values() for e in exts}
+        if ext not in allowed:
+            return _json({"ok": False, "error": "Format non autorisé."}, 400)
+        att = DossierAttachment.objects.create(
+            dossier=dossier,
+            file=f,
+            original_name=name[:255],
+            content_type=f.content_type or "",
+            size=f.size,
+            uploaded_by="admin",
+        )
+        return _json({"ok": True, "id": att.id})
+
     body = _read_body(request)
 
     if table == "clients":
@@ -517,6 +692,60 @@ def _api_admin_create(request, table):
             commentaire=(body.get("commentaire") or "").strip(),
         )
         return _json({"ok": True, "id": obj.id})
+
+    if table == "prefactures":
+        try:
+            dossier = ClientServiceSuivi.objects.get(pk=int(body.get("dossier", 0)))
+        except (ValueError, TypeError, ClientServiceSuivi.DoesNotExist):
+            return _json({"ok": False, "error": "Dossier introuvable."}, 400)
+        try:
+            tva = float(body.get("taux_tva", 19) or 19)
+        except ValueError:
+            return _json({"ok": False, "error": "TVA invalide."}, 400)
+        montant_ht = dossier.montant or 0
+        montant_ttc = Decimal(montant_ht) * (Decimal("1") + Decimal(str(tva)) / Decimal("100"))
+        numero = f"PF-{date.today().year}-{Prefacture.objects.count() + 1:03d}"
+        while Prefacture.objects.filter(numero=numero).exists():
+            numero = f"PF-{date.today().year}-{Prefacture.objects.count() + 2:03d}"
+        pf = Prefacture.objects.create(
+            dossier=dossier,
+            numero=numero,
+            date=date.today(),
+            montant_ht=montant_ht,
+            taux_tva=tva,
+            montant_ttc=montant_ttc,
+        )
+        return _json({"ok": True, "id": pf.id, "numero": pf.numero})
+
+    if table == "dossier_tasks":
+        try:
+            dossier = ClientServiceSuivi.objects.get(pk=int(body.get("dossier", 0)))
+        except (ValueError, TypeError, ClientServiceSuivi.DoesNotExist):
+            return _json({"ok": False, "error": "Dossier introuvable."}, 400)
+        titre = (body.get("titre") or "").strip()
+        if not titre:
+            return _json({"ok": False, "error": "Titre de la tâche requis."}, 400)
+        statut = body.get("statut", "a_faire")
+        repetition = body.get("repetition", "ponctuel")
+        valid_st = {s for s, _ in DossierTask.STATUT_CHOICES}
+        valid_rp = {s for s, _ in DossierTask.REPETITION_CHOICES}
+        if statut not in valid_st or repetition not in valid_rp:
+            return _json({"ok": False, "error": "Statut ou répétition invalide."}, 400)
+        echeance = (body.get("date_echeance") or "").strip()
+        if echeance:
+            try:
+                date.fromisoformat(echeance)
+            except ValueError:
+                return _json({"ok": False, "error": "Date d'échéance invalide (AAAA-MM-JJ)."}, 400)
+        task = DossierTask.objects.create(
+            dossier=dossier,
+            titre=titre,
+            description=(body.get("description") or "").strip(),
+            statut=statut,
+            date_echeance=echeance or None,
+            repetition=repetition,
+        )
+        return _json({"ok": True, "id": task.id})
 
     if table == "client_messages":
         try:

@@ -1,5 +1,8 @@
-from django.urls import path
+from django.urls import path, re_path
 from django.views.generic import TemplateView
+from django.views.static import serve
+
+from django.conf import settings
 
 from . import views
 
@@ -26,6 +29,9 @@ urlpatterns = [
     path("api/auth/logout", views.api_client_logout, name="api_client_logout"),
     path("api/client/dashboard", views.api_client_dashboard, name="api_client_dashboard"),
     path("api/client/dossiers", views.api_client_create_dossier, name="api_client_create_dossier"),
+    path("api/client/dossiers/<int:dossier_id>/attachments", views.api_client_attachments, name="api_client_attachments"),
+    path("api/client/attachments/<int:attachment_id>", views.api_client_attachment_delete, name="api_client_attachment_delete"),
+    path("api/client/prefacture/<int:prefacture_id>", views.api_client_prefacture, name="api_client_prefacture"),
     path("api/client/messages", views.api_client_messages, name="api_client_messages"),
 
     # API admin (jeton Bearer)
@@ -34,4 +40,9 @@ urlpatterns = [
     # SEO
     path("sitemap.xml", views.sitemap, name="sitemap"),
     path("robots.txt", views.robots, name="robots"),
+]
+
+# Fichiers uploadés (media) servis par Django en dev comme en prod
+urlpatterns += [
+    re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
 ]

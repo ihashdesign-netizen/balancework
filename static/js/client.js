@@ -32,6 +32,17 @@ const BalanceClient = (() => {
     return data;
   }
 
+  async function apiForm(path, formData) {
+    const res = await fetch(API_BASE + path, {
+      method: "POST",
+      headers: { ...(token() ? { Authorization: `Bearer ${token()}` } : {}) },
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Erreur");
+    return data;
+  }
+
   async function login(e) {
     e.preventDefault();
     clearAlert("client-alert");
@@ -95,23 +106,142 @@ const BalanceClient = (() => {
       wrap.innerHTML = '<p style="color:#64748b">Aucun dossier en cours pour le moment. Ouvrez un dossier ci-dessus.</p>';
       return;
     }
-    const rows = suivis
+    const cards = suivis
       .map((s) => {
         const badge = s.statut_service === "Clôturé" ? "badge confirme" : "badge nouveau";
         const pay = s.statut_paiement === "Payé" ? "badge confirme" : "badge nouveau";
-        return `<tr>
-          <td>${s.service}</td>
-          <td>${s.date_echeance}</td>
-          <td><span class="${badge}">${s.statut_service}</span></td>
-          <td><span class="${pay}">${s.statut_paiement}</span></td>
-          <td>${s.montant} TND</td>
-          <td>${s.commentaire || "—"}</td>
-        </tr>`;
+
+        const tasks = (s.tasks || []).length
+          ? `<ul class="task-list">${s.tasks
+              .map((t) => `<li><span class="badge ${t.statut === "Terminé" ? "confirme" : "nouveau"}">${t.statut}</span> ${escapeHtml(t.titre)} — <small>${t.date_echeance} · ${t.repetition}</small></li>`)
+              .join("")}</ul>`
+          : '<p class="muted-sm">Aucune tâche définie pour ce dossier.</p>';
+
+        const prefactures = (s.prefactures || []).length
+          ? `<p class="muted-sm">Préfactures : ${s.prefactures
+              .map((p) => `<a href="#" onclick="event.preventDefault();BalanceClient.showPrefacture(${p.id})">${escapeHtml(p.numero)}</a> <span class="badge ${p.statut === "Payée" ? "confirme" : "nouveau"}">${p.statut}</span>`)
+              .join(" · ")}</p>`
+          : "";
+
+        const attachments = (s.attachments || []).length
+          ? `<ul class="att-list">${s.attachments
+              .map(
+                (a) =>
+                  `<li><span class="att-ico att-${a.category}">${a.category}</span> <a href="${a.url}" target="_blank" rel="noopener">${escapeHtml(a.name)}</a> <small>(${a.size} · ${a.uploaded_by})</small>${
+                    a.uploaded_by === "Vous" ? ` <a href="#" class="att-del" onclick="event.preventDefault();BalanceClient.deleteAttachment(${a.id})">✕</a>` : ""
+                  }</li>`,
+              )
+              .join("")}</ul>`
+          : '<p class="muted-sm">Aucune pièce jointe.</p>';
+
+        return `<div class="dossier-card">
+          <div class="dossier-head">
+            <div>
+              <strong>${escapeHtml(s.service)}</strong>
+              <div class="dossier-meta">Échéance : ${s.date_echeance} · Fréquence : ${s.frequence} · Prix : ${s.montant} TND</div>
+            </div>
+            <div class="dossier-status">
+              <span class="${badge}">${s.statut_service}</span>
+              <span class="${pay}">${s.statut_paiement}</span>
+            </div>
+          </div>
+          <p class="muted-sm">${escapeHtml(s.commentaire || "")}</p>
+          <div class="dossier-block"><strong>Tâches</strong>${tasks}</div>
+          ${prefactures}
+          <div class="dossier-block">
+            <strong>Pièces jointes</strong>
+            <div class="att-actions">
+              ${attachments}
+              <div class="upload-row">
+                <input type="file" id="file-${s.id}" class="file-input" />
+                <button class="btn btn-sm" onclick="BalanceClient.uploadAttachment(${s.id})">Ajouter un fichier</button>
+                <small class="muted-sm">image · pdf · Excel · Word · txt · zip · audio · vidéo (20 Mo max)</small>
+              </div>
+            </div>
+          </div>
+        </div>`;
       })
       .join("");
-    wrap.innerHTML = `<table class="admin-table">
-      <thead><tr><th>Service</th><th>Échéance</th><th>Statut dossier</th><th>Statut paiement</th><th>Montant</th><th>Notes</th></tr></thead>
-      <tbody>${rows}</tbody></table>`;
+    wrap.innerHTML = cards;
+  }
+
+  async function uploadAttachment(dossierId) {
+    const input = document.getElementById(`file-${dossierId}`);
+    if (!input.files.length) {
+      showAlert("dashboard-alert", "error", "Choisissez un fichier.");
+      return;
+    }
+    const fd = new FormData();
+    fd.append("file", input.files[0]);
+    try {
+      await apiForm(`/api/client/dossiers/${dossierId}/attachments`, fd);
+      showAlert("dashboard-alert", "success", "Fichier ajouté.");
+      input.value = "";
+      api("/api/client/dashboard")
+        .then((d) => renderSuivis(d.suivis || []))
+        .catch(() => {});
+    } catch (err) {
+      showAlert("dashboard-alert", "error", err.message);
+    }
+  }
+
+  async function deleteAttachment(attachmentId) {
+    try {
+      await api(`/api/client/attachments/${attachmentId}`, { method: "DELETE" });
+      api("/api/client/dashboard")
+        .then((d) => renderSuivis(d.suivis || []))
+        .catch(() => {});
+    } catch (err) {
+      showAlert("dashboard-alert", "error", err.message);
+    }
+  }
+
+  async function showPrefacture(id) {
+    try {
+      const data = await api(`/api/client/prefacture/${id}`);
+      const pf = data.prefacture;
+      const cab = data.cabinet;
+      const cl = data.client;
+      const tva = parseFloat(pf.montant_ht) * (parseFloat(pf.taux_tva) / 100);
+      const ttc = parseFloat(pf.montant_ttc);
+      document.getElementById("prefacture-overlay").style.display = "flex";
+      document.getElementById("prefacture-html").innerHTML = `
+        <div class="pf-head">
+          <div class="pf-logo">BT</div>
+          <div>
+            <h3>${escapeHtml(cab.nom)}</h3>
+            <p class="muted-sm">${escapeHtml(cab.adresse)}<br>${escapeHtml(cab.email)} · ${escapeHtml(cab.telephone)}<br>Matricule fiscal : ${escapeHtml(cab.matricule)}</p>
+          </div>
+        </div>
+        <h4 class="pf-title">PRÉFACTURE ${escapeHtml(pf.numero)}</h4>
+        <p class="muted-sm">Date : ${pf.date} · Statut : <span class="badge nouveau">${pf.statut}</span></p>
+        <p class="muted-sm">Client : <strong>${escapeHtml(cl.nom)}</strong> (${cl.statut})<br>${escapeHtml(cl.adresse || "")}<br>${cl.matricule_fiscale ? "Matricule fiscal : " + cl.matricule_fiscale : ""}${cl.cin ? " · CIN : " + cl.cin : ""}</p>
+        <table class="admin-table pf-table">
+          <thead><tr><th>Désignation</th><th>Fréquence</th><th>Montant HT</th><th>TVA ${pf.taux_tva}%</th><th>Montant TTC</th></tr></thead>
+          <tbody><tr>
+            <td>${escapeHtml(pf.service)}${pf.description ? "<br><small>" + escapeHtml(pf.description) + "</small>" : ""}</td>
+            <td>${pf.frequence}</td>
+            <td>${pf.montant_ht} TND</td>
+            <td>${tva.toFixed(3)} TND</td>
+            <td><strong>${ttc.toFixed(3)} TND</strong></td>
+          </tr></tbody>
+        </table>`;
+    } catch (err) {
+      showAlert("dashboard-alert", "error", err.message);
+    }
+  }
+
+  function closePrefacture() {
+    document.getElementById("prefacture-overlay").style.display = "none";
+  }
+
+  function printPrefacture() {
+    const html = document.getElementById("prefacture-html").innerHTML;
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>Préfacture</title><style>body{font-family:Georgia,serif;color:#1e293b;padding:40px}.pf-logo{width:70px;height:70px;border-radius:50%;background:#b91c1c;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:26px}.pf-head{display:flex;gap:16px;align-items:center;margin-bottom:20px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #cbd5e1;padding:8px;text-align:left}th{background:#f1f5f9}.muted-sm{color:#64748b}</style></head><body>${html}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
   }
 
   let selectedService = null;
@@ -243,5 +373,5 @@ const BalanceClient = (() => {
     }
   });
 
-  return { login, register, logout, openDossier, sendMessage, selectService, cancelDossier };
+  return { login, register, logout, openDossier, sendMessage, selectService, cancelDossier, uploadAttachment, deleteAttachment, showPrefacture, closePrefacture, printPrefacture };
 })();

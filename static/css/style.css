@@ -264,6 +264,41 @@ textarea { min-height: 130px; resize: vertical; }
 .msg small { color: #64748b; }
 .msg-client { background: var(--primary-light); }
 .msg-admin { background: #eef2ff; }
+
+/* ---------- Espace client : dossiers, pièces jointes, préfacture ---------- */
+.dossier-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; background: #fff; }
+.dossier-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.dossier-head strong { font-size: 15px; }
+.dossier-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.dossier-status { display: flex; gap: 6px; }
+.dossier-block { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.dossier-block > strong { display: block; margin-bottom: 6px; font-size: 13px; }
+.muted-sm { color: var(--muted); font-size: 12px; margin: 4px 0; }
+.task-list { list-style: none; padding: 0; margin: 6px 0 0; }
+.task-list li { padding: 5px 0; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+.att-list { list-style: none; padding: 0; margin: 6px 0 0; }
+.att-list li { padding: 4px 0; font-size: 13px; }
+.att-list a { text-decoration: none; }
+.att-ico { display: inline-block; min-width: 52px; text-align: center; background: #eef2ff; color: #3730a3; border-radius: 6px; padding: 1px 6px; font-size: 11px; font-weight: 700; margin-right: 6px; text-transform: uppercase; }
+.att-audio { background: #fef3c7; color: #92400e; }
+.att-video { background: #fce7f3; color: #9d174d; }
+.att-archive { background: #ede9fe; color: #5b21b6; }
+.att-texte { background: #f1f5f9; color: #334155; }
+.att-pdf { background: #fee2e2; color: #991b1b; }
+.att-office { background: #d1fae5; color: #065f46; }
+.att-autre { background: #f1f5f9; color: #64748b; }
+.att-del { color: #b91c1c; font-weight: 700; margin-left: 4px; text-decoration: none; }
+.upload-row { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.file-input { max-width: 180px; font-size: 12px; }
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+.overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .6); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+.overlay-card { background: #fff; border-radius: 14px; padding: 24px; max-width: 640px; width: 100%; max-height: 88vh; overflow: auto; position: relative; }
+.overlay-close { position: absolute; top: 8px; right: 12px; border: none; background: none; font-size: 24px; cursor: pointer; color: var(--muted); }
+.pf-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+.pf-logo { width: 64px; height: 64px; border-radius: 50%; background: #b91c1c; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 24px; }
+.pf-title { margin: 4px 0 2px; }
+.pf-table { margin-top: 10px; }
+.pf-wrap .btn { margin-top: 16px; }
 .checklist { list-style: none; padding: 0; margin: 10px 0 0; }
 .checklist li { padding: 8px 0 8px 28px; position: relative; font-size: 14px; }
 .checklist li::before { content: "✓"; position: absolute; left: 0; top: 8px; color: var(--accent, #2563eb); font-weight: 700; }
