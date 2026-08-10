@@ -25,6 +25,8 @@ urlpatterns = [
     path("api/auth/login", views.api_client_login, name="api_client_login"),
     path("api/auth/logout", views.api_client_logout, name="api_client_logout"),
     path("api/client/dashboard", views.api_client_dashboard, name="api_client_dashboard"),
+    path("api/client/dossiers", views.api_client_create_dossier, name="api_client_create_dossier"),
+    path("api/client/messages", views.api_client_messages, name="api_client_messages"),
 
     # API admin (jeton Bearer)
     path("api/admin/<str:table>", views.api_admin, name="api_admin"),

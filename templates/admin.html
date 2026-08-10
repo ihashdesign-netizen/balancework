@@ -28,8 +28,12 @@
           <button data-tab="client_service_suivis" onclick="BalanceAdmin.switchTab('client_service_suivis')">Dossiers clients</button>
           <button data-tab="types_service" onclick="BalanceAdmin.switchTab('types_service')">Types de service</button>
         </div>
-        <button class="btn btn-outline" onclick="BalanceAdmin.logout()">Déconnexion</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn" id="create-btn" style="display:none" onclick="BalanceAdmin.toggleCreate()">＋ Ajouter</button>
+          <button class="btn btn-outline" onclick="BalanceAdmin.logout()">Déconnexion</button>
+        </div>
       </div>
+      <div id="create-box" style="display:none;margin-bottom:20px"></div>
       <div id="tab-content"><p>Chargement…</p></div>
     </div>
   </div>

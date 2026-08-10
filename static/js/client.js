@@ -92,7 +92,7 @@ const BalanceClient = (() => {
   function renderSuivis(suivis) {
     const wrap = document.getElementById("dashboard-content");
     if (!suivis.length) {
-      wrap.innerHTML = '<p style="color:#64748b">Aucun dossier en cours pour le moment. Votre cabinet les ajoutera ici.</p>';
+      wrap.innerHTML = '<p style="color:#64748b">Aucun dossier en cours pour le moment. Ouvrez un dossier ci-dessus.</p>';
       return;
     }
     const rows = suivis
@@ -114,11 +114,117 @@ const BalanceClient = (() => {
       <tbody>${rows}</tbody></table>`;
   }
 
+  let selectedService = null;
+
+  async function renderServices() {
+    const wrap = document.getElementById("services-list");
+    try {
+      const data = await api("/api/services");
+      if (!(data.services || []).length) {
+        wrap.innerHTML = '<p style="color:#64748b">Aucun service disponible.</p>';
+        return;
+      }
+      wrap.innerHTML = data.services
+        .map(
+          (s) => `<div class="svc-row">
+            <div>
+              <strong>${s.title}</strong>
+              <p>${s.short_desc}</p>
+            </div>
+            <button class="btn" onclick="BalanceClient.selectService(${s.id}, '${escapeHtml(s.title).replace(/'/g, "\\'")}')">Ouvrir dossier</button>
+          </div>`,
+        )
+        .join("");
+    } catch (e) {
+      wrap.innerHTML = `<p style="color:#b91c1c">${e.message}</p>`;
+    }
+  }
+
+  function selectService(id, title) {
+    selectedService = id;
+    document.getElementById("dos-service-label").textContent = `Service : ${title}`;
+    document.getElementById("dossier-form").style.display = "";
+    document.getElementById("dos-description").focus();
+  }
+
+  function cancelDossier() {
+    selectedService = null;
+    document.getElementById("dossier-form").style.display = "none";
+    document.getElementById("dos-description").value = "";
+  }
+
+  async function openDossier() {
+    const desc = document.getElementById("dos-description").value.trim();
+    if (!selectedService || !desc) {
+      showAlert("dashboard-alert", "error", "Choisissez un service et décrivez votre besoin.");
+      return;
+    }
+    const btn = event.target;
+    btn.disabled = true;
+    try {
+      const data = await api("/api/client/dossiers", {
+        method: "POST",
+        body: JSON.stringify({ type_service: selectedService, description: desc }),
+      });
+      showAlert("dashboard-alert", "success", data.message);
+      cancelDossier();
+      api("/api/client/dashboard")
+        .then((d) => renderSuivis(d.suivis || []))
+        .catch(() => {});
+    } catch (err) {
+      showAlert("dashboard-alert", "error", err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function loadMessages() {
+    const wrap = document.getElementById("messages-thread");
+    try {
+      const data = await api("/api/client/messages");
+      if (!(data.messages || []).length) {
+        wrap.innerHTML = '<p style="color:#64748b">Aucun message pour le moment.</p>';
+        return;
+      }
+      wrap.innerHTML = data.messages
+        .map((m) => `<div class="msg ${m.direction === "admin" ? "msg-admin" : "msg-client"}"><strong>${m.direction === "admin" ? "Cabinet" : "Vous"}</strong> — <small>${m.created_at}</small><p>${escapeHtml(m.text)}</p></div>`)
+        .join("");
+      wrap.scrollTop = wrap.scrollHeight;
+    } catch (e) {
+      wrap.innerHTML = `<p style="color:#b91c1c">${e.message}</p>`;
+    }
+  }
+
+  async function sendMessage() {
+    const text = document.getElementById("msg-text").value.trim();
+    if (!text) {
+      showAlert("dashboard-alert", "error", "Écrivez un message.");
+      return;
+    }
+    const btn = event.target;
+    btn.disabled = true;
+    try {
+      await api("/api/client/messages", { method: "POST", body: JSON.stringify({ text }) });
+      document.getElementById("msg-text").value = "";
+      await loadMessages();
+    } catch (err) {
+      showAlert("dashboard-alert", "error", err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
   function showDashboard(client) {
     document.getElementById("auth-box").style.display = "none";
     document.getElementById("dashboard-box").style.display = "";
     document.getElementById("client-welcome").textContent =
       `Bienvenue ${client.name}${client.matricule_fiscale ? " — Matricule : " + client.matricule_fiscale : ""}`;
+    renderServices();
+    loadMessages();
     api("/api/client/dashboard")
       .then((data) => renderSuivis(data.suivis || []))
       .catch((err) => {
@@ -137,5 +243,5 @@ const BalanceClient = (() => {
     }
   });
 
-  return { login, register, logout };
+  return { login, register, logout, openDossier, sendMessage, selectService, cancelDossier };
 })();

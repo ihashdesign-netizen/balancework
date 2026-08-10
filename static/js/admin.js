@@ -66,8 +66,37 @@ const BalanceAdmin = (() => {
     document.querySelectorAll(".admin-tabs button").forEach((b) => {
       b.classList.toggle("active", b.dataset.tab === tab);
     });
+    document.getElementById("create-box").style.display = "none";
+    document.getElementById("create-box").innerHTML = "";
+    document.getElementById("create-btn").style.display = CREATE_FORMS[tab] ? "" : "none";
     loadTab(tab);
   }
+
+  const CREATE_FORMS = {
+    clients: [
+      { name: "name", label: "Nom *", type: "text" },
+      { name: "prenom", label: "Prénom", type: "text" },
+      { name: "email", label: "E-mail *", type: "email" },
+      { name: "phone", label: "Téléphone", type: "text" },
+      { name: "company", label: "Société", type: "text" },
+      { name: "matricule_fiscale", label: "Matricule fiscale", type: "text" },
+      { name: "cin", label: "CIN", type: "text" },
+      { name: "notes", label: "Notes", type: "textarea" },
+    ],
+    client_service_suivis: [
+      { name: "client", label: "Client *", type: "select", source: "/api/admin/clients", valueKey: "id", textKey: (c) => c.name },
+      { name: "type_service", label: "Service *", type: "select", source: "/api/admin/types_service", valueKey: "id", textKey: (s) => s.title },
+      { name: "montant", label: "Montant (TND) *", type: "number", step: "0.001" },
+      { name: "statut_paiement", label: "Statut paiement", type: "select", options: ["en_attente", "paye", "retard"] },
+      { name: "statut_service", label: "Statut dossier", type: "select", options: ["en_cours", "valide", "cloture"] },
+      { name: "date_echeance", label: "Échéance (AAAA-MM-JJ)", type: "date" },
+      { name: "commentaire", label: "Notes / accusé TEJ", type: "textarea" },
+    ],
+    client_messages: [
+      { name: "client", label: "Client *", type: "select", source: "/api/admin/clients", valueKey: "id", textKey: (c) => c.name },
+      { name: "text", label: "Réponse au client *", type: "textarea" },
+    ],
+  };
 
   const COLUMNS = {
     devis_requests: [
@@ -208,6 +237,84 @@ const BalanceAdmin = (() => {
     return str.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  function fieldHtml(f) {
+    const id = "cf-" + f.name;
+    if (f.type === "select" && f.options) {
+      const opts = f.options.map((o) => `<option value="${o}">${o.replace("_", " ")}</option>`).join("");
+      return `<select id="${id}" ${f.label.includes("*") ? "required" : ""}><option value="">— Choisir —</option>${opts}</select>`;
+    }
+    if (f.type === "select") {
+      return `<select id="${id}" ${f.label.includes("*") ? "required" : ""}><option value="">Chargement…</option></select>`;
+    }
+    if (f.type === "textarea") {
+      return `<textarea id="${id}" rows="2"></textarea>`;
+    }
+    return `<input id="${id}" type="${f.type}" ${f.step ? `step="${f.step}"` : ""} ${f.label.includes("*") ? "required" : ""} />`;
+  }
+
+  async function buildCreateForm() {
+    const cfg = CREATE_FORMS[currentTab];
+    const box = document.getElementById("create-box");
+    const fields = cfg
+      .map((f) => `<div class="form-group"><label for="cf-${f.name}">${f.label}</label>${fieldHtml(f)}</div>`)
+      .join("");
+    box.innerHTML = `<div class="card">
+      <h3 style="margin:0 0 14px">Ajouter — ${currentTab.replace(/_/g, " ")}</h3>
+      <form id="create-form" class="form-grid" style="margin:0">
+        ${fields}
+        <div class="form-group full" style="display:flex;gap:8px">
+          <button class="btn" type="submit">Enregistrer</button>
+          <button class="btn btn-outline" type="button" onclick="BalanceAdmin.toggleCreate()">Annuler</button>
+        </div>
+      </form>
+    </div>`;
+
+    for (const f of cfg) {
+      if (f.type === "select" && f.source) {
+        const el = document.getElementById("cf-" + f.name);
+        try {
+          const data = await api(f.source);
+          const opts = (data.items || [])
+            .map((it) => `<option value="${it[f.valueKey]}">${f.textKey(it)}</option>`)
+            .join("");
+          el.innerHTML = `<option value="">— Choisir —</option>${opts}`;
+        } catch (e) {
+          el.innerHTML = `<option value="">— Erreur de chargement —</option>`;
+        }
+      }
+    }
+    document.getElementById("create-form").addEventListener("submit", submitCreate);
+  }
+
+  async function submitCreate(e) {
+    e.preventDefault();
+    const cfg = CREATE_FORMS[currentTab];
+    const payload = {};
+    for (const f of cfg) {
+      const el = document.getElementById("cf-" + f.name);
+      payload[f.name] = el.value.trim();
+      if (f.label.includes("*") && !payload[f.name]) {
+        alert(`Champ requis : ${f.label}`);
+        return;
+      }
+    }
+    try {
+      await api(`/api/admin/${currentTab}`, { method: "POST", body: JSON.stringify(payload) });
+      document.getElementById("create-box").style.display = "none";
+      document.getElementById("create-box").innerHTML = "";
+      loadTab(currentTab);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  function toggleCreate() {
+    const box = document.getElementById("create-box");
+    const shown = box.style.display !== "none";
+    box.style.display = shown ? "none" : "";
+    if (!shown) buildCreateForm();
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     if (token()) {
       api("/api/admin/devis_requests")
@@ -216,5 +323,5 @@ const BalanceAdmin = (() => {
     }
   });
 
-  return { login, logout, switchTab, updateStatus };
+  return { login, logout, switchTab, updateStatus, toggleCreate };
 })();

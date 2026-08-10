@@ -14,6 +14,7 @@ from .models import (
     Appointment,
     AuthToken,
     Client,
+    ClientMessage,
     ClientServiceSuivi,
     DevisRequest,
     Message,
@@ -89,7 +90,7 @@ def _service_title(service):
 @require_GET
 def api_services(request):
     services = list(Service.objects.values(
-        "slug", "title", "short_desc", "description", "icon"
+        "id", "slug", "title", "short_desc", "description", "icon"
     ))
     return _json({"ok": True, "services": services})
 
@@ -305,7 +306,7 @@ def api_client_dashboard(request):
             "montant": str(s.montant),
             "statut_paiement": s.get_statut_paiement_display(),
             "statut_service": s.get_statut_service_display(),
-            "date_echeance": s.date_echeance.strftime("%d/%m/%Y"),
+            "date_echeance": s.date_echeance.strftime("%d/%m/%Y") if s.date_echeance else "—",
             "commentaire": s.commentaire,
         })
     return _json({"ok": True, "client": _client_payload(client), "suivis": suivis})
@@ -319,6 +320,62 @@ def _client_payload(client):
         "matricule_fiscale": client.matricule_fiscale,
         "cin": client.cin,
     }
+
+
+@csrf_exempt
+def api_client_create_dossier(request):
+    client = _client_from_request(request)
+    if not client:
+        return _json({"ok": False, "error": "Non autorisé"}, 401)
+    if request.method != "POST":
+        return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
+    body = _read_body(request)
+    try:
+        service = Service.objects.get(pk=int(body.get("type_service", 0)))
+    except (ValueError, Service.DoesNotExist):
+        return _json({"ok": False, "error": "Service introuvable."}, 400)
+    description = (body.get("description") or "").strip()
+    if not description:
+        return _json({"ok": False, "error": "Décrivez votre besoin."}, 400)
+    obj = ClientServiceSuivi.objects.create(
+        client=client,
+        type_service=service,
+        montant=0,
+        statut_paiement="en_attente",
+        statut_service="en_cours",
+        commentaire=description,
+    )
+    return _json({"ok": True, "id": obj.id, "message": "Dossier ouvert. Le cabinet vous répondra rapidement."})
+
+
+@csrf_exempt
+def api_client_messages(request):
+    client = _client_from_request(request)
+    if not client:
+        return _json({"ok": False, "error": "Non autorisé"}, 401)
+    if request.method == "GET":
+        items = [
+            {
+                "id": m.id,
+                "direction": m.direction,
+                "text": m.text,
+                "created_at": m.created_at.strftime("%d/%m/%Y %H:%M"),
+            }
+            for m in ClientMessage.objects.filter(client=client)
+        ]
+        return _json({"ok": True, "messages": items})
+    if request.method == "POST":
+        text = (request.body or b"").decode("utf-8", "replace")
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            payload = {}
+        text = (payload.get("text") or "").strip()
+        if not text:
+            return _json({"ok": False, "error": "Message vide."}, 400)
+        ClientMessage.objects.create(client=client, direction="client", text=text)
+        return _json({"ok": True, "message": "Message envoyé."})
+    return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
 
 
 # ---------------- API Admin (jeton Bearer) ----------------
@@ -337,6 +394,7 @@ TABLES = {
     "service_followups": (ServiceFollowUp, ["id", "client_name", "service_title", "status", "start_date", "due_date", "notes", "created_at"], None),
     "types_service": (Service, ["id", "title", "slug", "short_desc"], None),
     "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "commentaire"], None),
+    "client_messages": (ClientMessage, ["id", "client_name", "direction", "text", "created_at"], None),
 }
 
 
@@ -365,19 +423,110 @@ def api_admin(request, table):
         except (ValueError, model.DoesNotExist):
             return _json({"ok": False, "error": "Élément introuvable"}, 404)
         field = body.get("field", "status")
+        value = body.get("status", "")
         choices_attr = {
             "status": "STATUS_CHOICES",
             "statut_paiement": "STATUT_PAIEMENT_CHOICES",
             "statut_service": "STATUT_SERVICE_CHOICES",
         }.get(field)
-        if not choices_attr or not hasattr(obj, field):
+        if choices_attr:
+            valid = {s for s, _ in getattr(obj, choices_attr, [])}
+            if value not in valid:
+                return _json({"ok": False, "error": "Statut invalide"}, 400)
+        elif field == "montant":
+            try:
+                value = float(value)
+            except ValueError:
+                return _json({"ok": False, "error": "Montant invalide"}, 400)
+        elif field == "date_echeance":
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                return _json({"ok": False, "error": "Date invalide (AAAA-MM-JJ)"}, 400)
+        elif field in ("commentaire", "notes"):
+            value = str(value)
+        else:
+            return _json({"ok": False, "error": "Champ non modifiable"}, 400)
+        if not hasattr(obj, field):
             return _json({"ok": False, "error": "Champ invalide"}, 400)
-        value = body.get("status", "")
-        valid = {s for s, _ in getattr(obj, choices_attr, [])}
-        if value not in valid:
-            return _json({"ok": False, "error": "Statut invalide"}, 400)
         setattr(obj, field, value)
         obj.save(update_fields=[field])
         return _json({"ok": True})
 
+    if request.method == "POST":
+        return _api_admin_create(request, table)
+
     return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
+
+
+def _api_admin_create(request, table):
+    body = _read_body(request)
+
+    if table == "clients":
+        name = (body.get("name") or "").strip()
+        email = (body.get("email") or "").strip()
+        if not name or not email:
+            return _json({"ok": False, "error": "Nom et e-mail requis."}, 400)
+        if Client.objects.filter(email__iexact=email).exists():
+            return _json({"ok": False, "error": "Un client existe déjà avec cet e-mail."}, 400)
+        client = Client.objects.create(
+            name=name,
+            prenom=(body.get("prenom") or "").strip(),
+            email=email,
+            phone=(body.get("phone") or "").strip(),
+            company=(body.get("company") or "").strip(),
+            matricule_fiscale=(body.get("matricule_fiscale") or "").strip(),
+            cin=(body.get("cin") or "").strip(),
+            notes=(body.get("notes") or "").strip(),
+        )
+        return _json({"ok": True, "id": client.id})
+
+    if table == "client_service_suivis":
+        try:
+            client = Client.objects.get(pk=int(body.get("client", 0)))
+        except (ValueError, Client.DoesNotExist):
+            return _json({"ok": False, "error": "Client introuvable."}, 400)
+        try:
+            service = Service.objects.get(pk=int(body.get("type_service", 0)))
+        except (ValueError, Service.DoesNotExist):
+            return _json({"ok": False, "error": "Service introuvable."}, 400)
+        montant = (body.get("montant") or "").strip()
+        try:
+            montant = float(montant)
+        except ValueError:
+            return _json({"ok": False, "error": "Montant invalide."}, 400)
+        echeance = (body.get("date_echeance") or "").strip()
+        if echeance:
+            try:
+                date.fromisoformat(echeance)
+            except ValueError:
+                return _json({"ok": False, "error": "Date d'échéance invalide (AAAA-MM-JJ)."}, 400)
+        paiement = body.get("statut_paiement", "en_attente")
+        service_statut = body.get("statut_service", "en_cours")
+        valid_p = {s for s, _ in ClientServiceSuivi.STATUT_PAIEMENT_CHOICES}
+        valid_s = {s for s, _ in ClientServiceSuivi.STATUT_SERVICE_CHOICES}
+        if paiement not in valid_p or service_statut not in valid_s:
+            return _json({"ok": False, "error": "Statut invalide."}, 400)
+        obj = ClientServiceSuivi.objects.create(
+            client=client,
+            type_service=service,
+            montant=montant,
+            statut_paiement=paiement,
+            statut_service=service_statut,
+            date_echeance=echeance or None,
+            commentaire=(body.get("commentaire") or "").strip(),
+        )
+        return _json({"ok": True, "id": obj.id})
+
+    if table == "client_messages":
+        try:
+            client = Client.objects.get(pk=int(body.get("client", 0)))
+        except (ValueError, Client.DoesNotExist):
+            return _json({"ok": False, "error": "Client introuvable."}, 400)
+        text = (body.get("text") or "").strip()
+        if not text:
+            return _json({"ok": False, "error": "Message vide."}, 400)
+        obj = ClientMessage.objects.create(client=client, direction="admin", text=text)
+        return _json({"ok": True, "id": obj.id})
+
+    return _json({"ok": False, "error": "Création non disponible pour cette table."}, 400)

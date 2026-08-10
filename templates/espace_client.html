@@ -76,6 +76,38 @@
         </div>
         <button class="btn btn-outline" onclick="BalanceClient.logout()">Déconnexion</button>
       </div>
+
+      <div id="dashboard-alert" class="alert"></div>
+
+      <div class="grid-2" style="margin-bottom:24px">
+        <div class="card">
+          <h3>Ouvrir un nouveau dossier</h3>
+          <p style="color:#64748b;font-size:14px;margin:0 0 14px">Choisissez un service : le cabinet traitera votre demande et vous répondra dans son espace.</p>
+          <div id="services-list" style="max-height:300px;overflow:auto"><p style="color:#64748b">Chargement…</p></div>
+          <div id="dossier-form" style="display:none;margin-top:14px">
+            <p id="dos-service-label" style="font-weight:700;margin:0 0 8px"></p>
+            <div class="form-group">
+              <label for="dos-description">Description du besoin *</label>
+              <textarea id="dos-description" rows="3" placeholder="Décrivez votre situation, période concernée, éléments fournis…"></textarea>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn" onclick="BalanceClient.openDossier()">Ouvrir le dossier</button>
+              <button class="btn btn-outline" onclick="BalanceClient.cancelDossier()">Annuler</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Messagerie avec le cabinet</h3>
+          <p style="color:#64748b;font-size:14px;margin:0 0 14px">Échangez directement avec votre cabinet sur vos dossiers.</p>
+          <div id="messages-thread" style="max-height:260px;overflow:auto;margin-bottom:12px"><p style="color:#64748b">Chargement…</p></div>
+          <div class="form-group" style="margin-bottom:8px">
+            <textarea id="msg-text" rows="2" placeholder="Votre message…"></textarea>
+          </div>
+          <button class="btn btn-lg btn-block" onclick="BalanceClient.sendMessage()">Envoyer</button>
+        </div>
+      </div>
+
       <div id="dashboard-content"><p>Chargement…</p></div>
     </div>
 

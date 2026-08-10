@@ -156,10 +156,10 @@ class ClientServiceSuivi(models.Model):
     type_service = models.ForeignKey(
         Service, null=True, blank=True, on_delete=models.PROTECT, verbose_name="Type de service"
     )
-    montant = models.DecimalField(max_digits=10, decimal_places=3, verbose_name="Montant (TND)")
+    montant = models.DecimalField(max_digits=10, decimal_places=3, default=0, verbose_name="Montant (TND)")
     statut_paiement = models.CharField(max_length=20, choices=STATUT_PAIEMENT_CHOICES, default="en_attente", verbose_name="Statut de paiement")
     statut_service = models.CharField(max_length=20, choices=STATUT_SERVICE_CHOICES, default="en_cours", verbose_name="Suivi du service")
-    date_echeance = models.DateField(verbose_name="Échéance fiscale / sociale")
+    date_echeance = models.DateField(null=True, blank=True, verbose_name="Échéance fiscale / sociale")
     commentaire = models.TextField(blank=True, verbose_name="Notes / remarques (ex : accusé TEJ)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
 
@@ -178,6 +178,31 @@ class ClientServiceSuivi(models.Model):
     @property
     def service_title(self):
         return self.type_service.title if self.type_service else "—"
+
+
+class ClientMessage(models.Model):
+    """Message échangé entre le client et le cabinet."""
+
+    DIRECTION_CHOICES = [
+        ("client", "Client"),
+        ("admin", "Cabinet"),
+    ]
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="messages", verbose_name="Client")
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default="client", verbose_name="Émetteur")
+    text = models.TextField(verbose_name="Message")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Envoyé le")
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "Message client"
+        verbose_name_plural = "Messages clients"
+
+    def __str__(self):
+        return f"[{self.get_direction_display()}] {self.client.name} — {self.text[:40]}"
+
+    @property
+    def client_name(self):
+        return self.client.name
 
 
 class AuthToken(models.Model):

@@ -256,6 +256,14 @@ textarea { min-height: 130px; resize: vertical; }
 .footer-bottom a:hover { color: #fff; }
 
 /* ---------- Badge / misc ---------- */
+.svc-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.svc-row p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.svc-row .btn { white-space: nowrap; }
+.msg { padding: 8px 12px; border-radius: 10px; margin-bottom: 8px; font-size: 14px; }
+.msg p { margin: 4px 0 0; }
+.msg small { color: #64748b; }
+.msg-client { background: var(--primary-light); }
+.msg-admin { background: #eef2ff; }
 .checklist { list-style: none; padding: 0; margin: 10px 0 0; }
 .checklist li { padding: 8px 0 8px 28px; position: relative; font-size: 14px; }
 .checklist li::before { content: "✓"; position: absolute; left: 0; top: 8px; color: var(--accent, #2563eb); font-weight: 700; }
