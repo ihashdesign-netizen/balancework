@@ -12,7 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "balancework.settings")
-os.environ["SITE_URL"] = "https://balance.pages.dev/"
+os.environ["SITE_URL"] = "https://balancetaxsafety.pages.dev/"
 os.environ["ALLOWED_HOSTS"] = "testserver,localhost,127.0.0.1"
 os.environ["DB_ENGINE"] = "sqlite"
 os.environ["DEBUG"] = "1"
