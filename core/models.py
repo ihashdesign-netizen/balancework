@@ -436,3 +436,42 @@ class ServiceFollowUp(models.Model):
     @property
     def service_title(self):
         return self.service.title if self.service else "—"
+
+
+class DeclarationFiscale(models.Model):
+    """Suivi des échéances et déclarations fiscales (DGI Tunisie)."""
+
+    TYPE_DECLARATION_CHOICES = [
+        ("mensuelle", "Déclaration Mensuelle (TVA / RS)"),
+        ("acompte", "Acompte Provisionnel IS / IRPP"),
+        ("annuelle", "Bilan & Liasse Fiscale Annuelle"),
+        ("autre", "Autre Déclaration Spécifique"),
+    ]
+    STATUT_CHOICES = [
+        ("a_faire", "À préparer"),
+        ("en_cours", "En cours de vérification"),
+        ("depose", "Déposé (Validé)"),
+        ("retard", "En retard"),
+    ]
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="declarations", verbose_name="Client")
+    type_declaration = models.CharField(max_length=20, choices=TYPE_DECLARATION_CHOICES, verbose_name="Type de déclaration")
+    periode = models.CharField(max_length=80, verbose_name="Période (ex : Mois de Juillet 2026 / Exercice 2025)")
+    date_echeance_legale = models.DateField(verbose_name="Date limite légale")
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default="a_faire", verbose_name="Statut du dossier")
+    numero_quittance_ou_tej = models.CharField(max_length=150, blank=True, null=True, verbose_name="N° quittance / accusé de dépôt")
+    montant_a_payer = models.DecimalField(max_digits=12, decimal_places=3, default=0, verbose_name="Montant net à payer (TND)")
+    notes_collaborateur = models.TextField(blank=True, null=True, verbose_name="Remarques internes ou conseils")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
+
+    class Meta:
+        ordering = ["date_echeance_legale", "-id"]
+        verbose_name = "Déclaration fiscale"
+        verbose_name_plural = "Suivi des déclarations fiscales"
+
+    def __str__(self):
+        return f"{self.client.display_name} — {self.get_type_declaration_display()} ({self.periode})"
+
+    @property
+    def client_name(self):
+        return self.client.display_name

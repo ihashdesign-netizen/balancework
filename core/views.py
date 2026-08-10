@@ -17,6 +17,7 @@ from .models import (
     Client,
     ClientMessage,
     ClientServiceSuivi,
+    DeclarationFiscale,
     DevisRequest,
     DossierAttachment,
     DossierTask,
@@ -357,7 +358,20 @@ def api_client_dashboard(request):
             "prefactures": prefactures,
             "attachments": attachments,
         })
-    return _json({"ok": True, "client": _client_payload(client), "suivis": suivis})
+    declarations = [
+        {
+            "id": d.id,
+            "type_declaration": d.get_type_declaration_display(),
+            "periode": d.periode,
+            "date_echeance_legale": d.date_echeance_legale.strftime("%d/%m/%Y"),
+            "statut": d.get_statut_display(),
+            "numero_quittance_ou_tej": d.numero_quittance_ou_tej or "—",
+            "montant_a_payer": str(d.montant_a_payer),
+            "notes_collaborateur": d.notes_collaborateur or "",
+        }
+        for d in DeclarationFiscale.objects.filter(client=client)
+    ]
+    return _json({"ok": True, "client": _client_payload(client), "suivis": suivis, "declarations": declarations})
 
 
 @csrf_exempt
@@ -401,6 +415,7 @@ def api_client_prefacture(request, prefacture_id):
 
 def _client_payload(client):
     return {
+        "id": client.id,
         "name": f"{client.prenom} {client.name}".strip(),
         "email": client.email,
         "phone": client.phone,
@@ -533,6 +548,7 @@ TABLES = {
     "dossier_tasks": (DossierTask, ["id", "client_name", "dossier_service", "titre", "statut", "date_echeance", "repetition"], None),
     "prefactures": (Prefacture, ["id", "client_name", "dossier_service", "numero", "date", "montant_ht", "taux_tva", "montant_ttc", "statut"], None),
     "dossier_attachments": (DossierAttachment, ["id", "client_name", "dossier_service", "original_name", "category", "size", "uploaded_by", "created_at"], None),
+    "declarations": (DeclarationFiscale, ["id", "client_name", "type_declaration", "periode", "date_echeance_legale", "statut", "numero_quittance_ou_tej", "montant_a_payer", "notes_collaborateur"], None),
 }
 
 
@@ -574,6 +590,8 @@ def api_admin(request, table):
                 return {s for s, _ in obj.FREQUENCE_CHOICES}
             if field in ("repetition",):
                 return {s for s, _ in obj.REPETITION_CHOICES}
+            if field in ("type_declaration",):
+                return {s for s, _ in obj.TYPE_DECLARATION_CHOICES}
             if field in ("status", "statut"):
                 attr = "STATUT_CHOICES" if hasattr(obj, "STATUT_CHOICES") else "STATUS_CHOICES"
                 return {s for s, _ in getattr(obj, attr, [])}
@@ -583,17 +601,17 @@ def api_admin(request, table):
         if valid is not None:
             if value not in valid:
                 return _json({"ok": False, "error": "Statut invalide"}, 400)
-        elif field == "montant" or field == "taux_tva":
+        elif field in ("montant", "taux_tva", "montant_a_payer"):
             try:
                 value = float(value)
             except ValueError:
                 return _json({"ok": False, "error": "Valeur invalide"}, 400)
-        elif field == "date_echeance":
+        elif field == "date_echeance" or field == "date_echeance_legale":
             try:
                 date.fromisoformat(value)
             except ValueError:
                 return _json({"ok": False, "error": "Date invalide (AAAA-MM-JJ)"}, 400)
-        elif field in ("commentaire", "notes"):
+        elif field in ("commentaire", "notes", "numero_quittance_ou_tej", "notes_collaborateur"):
             value = str(value)
         else:
             return _json({"ok": False, "error": "Champ non modifiable"}, 400)
@@ -746,6 +764,41 @@ def _api_admin_create(request, table):
             repetition=repetition,
         )
         return _json({"ok": True, "id": task.id})
+
+    if table == "declarations":
+        try:
+            client = Client.objects.get(pk=int(body.get("client", 0)))
+        except (ValueError, TypeError, Client.DoesNotExist):
+            return _json({"ok": False, "error": "Client introuvable."}, 400)
+        type_declaration = body.get("type_declaration", "")
+        statut = body.get("statut", "a_faire")
+        if type_declaration not in {s for s, _ in DeclarationFiscale.TYPE_DECLARATION_CHOICES}:
+            return _json({"ok": False, "error": "Type de déclaration invalide."}, 400)
+        if statut not in {s for s, _ in DeclarationFiscale.STATUT_CHOICES}:
+            return _json({"ok": False, "error": "Statut invalide."}, 400)
+        periode = (body.get("periode") or "").strip()
+        echeance = (body.get("date_echeance_legale") or "").strip()
+        if not periode or not echeance:
+            return _json({"ok": False, "error": "Période et date limite légale requises."}, 400)
+        try:
+            date.fromisoformat(echeance)
+        except ValueError:
+            return _json({"ok": False, "error": "Date limite légale invalide (AAAA-MM-JJ)."}, 400)
+        try:
+            montant = float(body.get("montant_a_payer") or 0)
+        except ValueError:
+            return _json({"ok": False, "error": "Montant invalide."}, 400)
+        decl = DeclarationFiscale.objects.create(
+            client=client,
+            type_declaration=type_declaration,
+            periode=periode,
+            date_echeance_legale=echeance,
+            statut=statut,
+            numero_quittance_ou_tej=(body.get("numero_quittance_ou_tej") or "").strip(),
+            montant_a_payer=montant,
+            notes_collaborateur=(body.get("notes_collaborateur") or "").strip(),
+        )
+        return _json({"ok": True, "id": decl.id})
 
     if table == "client_messages":
         try:

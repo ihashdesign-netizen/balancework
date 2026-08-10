@@ -16,6 +16,10 @@ const BalanceAdmin = (() => {
     },
     dossier_tasks: { statut: ["a_faire", "en_cours", "termine"], repetition: ["ponctuel", "mensuel", "trimestriel", "semestriel", "annuel"] },
     prefactures: { statut: ["emise", "payee", "annulee"] },
+    declarations: {
+      statut: ["a_faire", "en_cours", "depose", "retard"],
+      type_declaration: ["mensuelle", "acompte", "annuelle", "autre"],
+    },
   };
 
   function token() {
@@ -115,6 +119,16 @@ const BalanceAdmin = (() => {
       { name: "dossier", label: "Dossier *", type: "select", source: "/api/admin/client_service_suivis", valueKey: "id", textKey: (d) => d.client_name + " — " + d.service_title },
       { name: "taux_tva", label: "Taux TVA (%)", type: "number", step: "0.01" },
     ],
+    declarations: [
+      { name: "client", label: "Client *", type: "select", source: "/api/admin/clients", valueKey: "id", textKey: (c) => c.name },
+      { name: "type_declaration", label: "Type de déclaration *", type: "select", options: ["mensuelle", "acompte", "annuelle", "autre"] },
+      { name: "periode", label: "Période (ex : Mois de Juillet 2026) *", type: "text" },
+      { name: "date_echeance_legale", label: "Date limite légale *", type: "date" },
+      { name: "statut", label: "Statut", type: "select", options: ["a_faire", "en_cours", "depose", "retard"] },
+      { name: "montant_a_payer", label: "Montant net à payer (TND)", type: "number", step: "0.001" },
+      { name: "numero_quittance_ou_tej", label: "N° quittance / accusé de dépôt", type: "text" },
+      { name: "notes_collaborateur", label: "Remarques internes ou conseils", type: "textarea" },
+    ],
   };
 
   const COLUMNS = {
@@ -212,6 +226,17 @@ const BalanceAdmin = (() => {
       { key: "montant_ttc", label: "TTC (TND)" },
       { key: "statut", label: "Statut" },
     ],
+    declarations: [
+      { key: "id", label: "N°" },
+      { key: "client_name", label: "Client" },
+      { key: "type_declaration", label: "Type" },
+      { key: "periode", label: "Période" },
+      { key: "date_echeance_legale", label: "Échéance légale" },
+      { key: "statut", label: "Statut" },
+      { key: "numero_quittance_ou_tej", label: "N° quittance / TEJ" },
+      { key: "montant_a_payer", label: "Montant (TND)" },
+      { key: "notes_collaborateur", label: "Notes" },
+    ],
     dossier_attachments: [
       { key: "id", label: "N°" },
       { key: "client_name", label: "Client" },
@@ -248,7 +273,7 @@ const BalanceAdmin = (() => {
         const cells = cols
           .map((c) => {
             const value = item[c.key];
-            if (c.key === "status" || c.key === "statut_paiement" || c.key === "statut_service" || c.key === "frequence" || c.key === "repetition" || (c.key === "statut" && tab !== "dossier_attachments")) {
+            if (c.key === "status" || c.key === "statut_paiement" || c.key === "statut_service" || c.key === "frequence" || c.key === "repetition" || c.key === "type_declaration" || (c.key === "statut" && tab !== "dossier_attachments")) {
               const opts = Array.isArray(STATUS_OPTIONS[tab])
                 ? STATUS_OPTIONS[tab]
                 : (STATUS_OPTIONS[tab] || {})[c.key] || [];

@@ -100,6 +100,40 @@ const BalanceClient = (() => {
     clearAlert("client-alert");
   }
 
+  function renderDeclarations(declarations) {
+    const wrap = document.getElementById("declarations-content");
+    if (!(declarations || []).length) {
+      wrap.innerHTML = "";
+      return;
+    }
+    const statutBadge = (s) => {
+      const map = { "Déposé (Validé)": "confirme", "En retard": "annule", "En cours de vérification": "nouveau" };
+      return `badge ${map[s] || "nouveau"}`;
+    };
+    const rows = declarations
+      .map((d) => {
+        const paye = parseFloat(d.montant_a_payer);
+        const overdue = d.statut === "En retard";
+        return `<tr>
+          <td>${d.type_declaration}</td>
+          <td>${escapeHtml(d.periode)}</td>
+          <td>${d.date_echeance_legale}</td>
+          <td><span class="${statutBadge(d.statut)}">${d.statut}</span></td>
+          <td>${paye > 0 ? paye.toFixed(3) + " TND" : "0,00 TND"}</td>
+          <td>${escapeHtml(d.numero_quittance_ou_tej)}</td>
+        </tr>`;
+      })
+      .join("");
+    wrap.innerHTML = `<div class="card">
+      <h3>Mes déclarations fiscales</h3>
+      <p style="color:#64748b;font-size:14px;margin:0 0 14px">Suivi des obligations déclaratives (DGI) gérées par votre cabinet.</p>
+      <table class="admin-table">
+        <thead><tr><th>Type</th><th>Période</th><th>Échéance légale</th><th>Statut</th><th>Montant à payer</th><th>N° quittance / TEJ</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }
+
   function renderSuivis(suivis) {
     const wrap = document.getElementById("dashboard-content");
     if (!suivis.length) {
@@ -356,7 +390,10 @@ const BalanceClient = (() => {
     renderServices();
     loadMessages();
     api("/api/client/dashboard")
-      .then((data) => renderSuivis(data.suivis || []))
+      .then((data) => {
+        renderDeclarations(data.declarations || []);
+        renderSuivis(data.suivis || []);
+      })
       .catch((err) => {
         document.getElementById("dashboard-content").innerHTML =
           `<div class="alert show alert-error">${err.message}</div>`;
