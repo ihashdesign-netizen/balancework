@@ -151,6 +151,17 @@ const BalanceClient = (() => {
               .join("")}</ul>`
           : '<p class="muted-sm">Aucune tâche définie pour ce dossier.</p>';
 
+        const serviceSuivis = (s.service_followups || []).length
+          ? `<ul class="task-list">${s.service_followups
+              .map(
+                (sf) =>
+                  `<li><span class="badge ${sf.status === "Terminé" || sf.status === "Clôturé" ? "confirme" : "nouveau"}">${sf.status}</span> ${escapeHtml(sf.service)} — <small>du ${sf.start_date} au ${sf.due_date}</small>${
+                    sf.tasks.length ? `<br><small>↳ Tâches : ${sf.tasks.map((t) => escapeHtml(t.titre) + " (" + t.statut + ")").join(", ")}</small>` : ""
+                  }</li>`,
+              )
+              .join("")}</ul>`
+          : "";
+
         const prefactures = (s.prefactures || []).length
           ? `<p class="muted-sm">Préfactures : ${s.prefactures
               .map((p) => `<a href="#" onclick="event.preventDefault();BalanceClient.showPrefacture(${p.id})">${escapeHtml(p.numero)}</a> <span class="badge ${p.statut === "Payée" ? "confirme" : "nouveau"}">${p.statut}</span>`)
@@ -180,6 +191,7 @@ const BalanceClient = (() => {
             </div>
           </div>
           <p class="muted-sm">${escapeHtml(s.commentaire || "")}</p>
+          ${serviceSuivis ? `<div class="dossier-block"><strong>Suivi du service</strong>${serviceSuivis}</div>` : ""}
           <div class="dossier-block"><strong>Tâches</strong>${tasks}</div>
           ${prefactures}
           <div class="dossier-block">

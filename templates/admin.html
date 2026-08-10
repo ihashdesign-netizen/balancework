@@ -43,5 +43,12 @@
   </div>
 </section>
 
+<div id="admin-detail-overlay" class="overlay" style="display:none" onclick="if(event.target===this)BalanceAdmin.closeDetail()">
+  <div class="overlay-card">
+    <button class="overlay-close" onclick="BalanceAdmin.closeDetail()">×</button>
+    <div id="admin-detail-body"></div>
+  </div>
+</div>
+
 {% endblock %}
 {% block extra_js %}<script src="{% static 'js/admin.js' %}"></script>{% endblock %}

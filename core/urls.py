@@ -35,6 +35,7 @@ urlpatterns = [
     path("api/client/messages", views.api_client_messages, name="api_client_messages"),
 
     # API admin (jeton Bearer)
+    path("api/admin/detail/<str:table>/<int:obj_id>", views.api_admin_detail, name="api_admin_detail"),
     path("api/admin/<str:table>", views.api_admin, name="api_admin"),
 
     # SEO

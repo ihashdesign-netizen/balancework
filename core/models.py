@@ -412,6 +412,10 @@ class ServiceFollowUp(models.Model):
         ("annule", "Annulé"),
     ]
     client = models.ForeignKey(Client, on_delete=models.CASCADE, verbose_name="Client")
+    dossier = models.ForeignKey(
+        "ClientServiceSuivi", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="service_followups", verbose_name="Dossier associé",
+    )
     service = models.ForeignKey(
         Service, null=True, blank=True, on_delete=models.SET_NULL, verbose_name="Service"
     )
@@ -431,11 +435,23 @@ class ServiceFollowUp(models.Model):
 
     @property
     def client_name(self):
-        return self.client.name
+        return self.client.display_name
 
     @property
     def service_title(self):
         return self.service.title if self.service else "—"
+
+    @property
+    def dossier_label(self):
+        return f"{self.dossier.service_title} (N°{self.dossier.id})" if self.dossier else "—"
+
+    @property
+    def dossier_id(self):
+        return self.dossier.id if self.dossier else None
+
+    @property
+    def dossier_tasks(self):
+        return self.dossier.tasks.all() if self.dossier else DossierTask.objects.none()
 
 
 class DeclarationFiscale(models.Model):

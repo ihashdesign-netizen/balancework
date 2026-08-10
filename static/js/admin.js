@@ -129,6 +129,15 @@ const BalanceAdmin = (() => {
       { name: "numero_quittance_ou_tej", label: "N° quittance / accusé de dépôt", type: "text" },
       { name: "notes_collaborateur", label: "Remarques internes ou conseils", type: "textarea" },
     ],
+    service_followups: [
+      { name: "client", label: "Client *", type: "select", source: "/api/admin/clients", valueKey: "id", textKey: (c) => c.name },
+      { name: "dossier", label: "Dossier associé *", type: "select", source: "/api/admin/client_service_suivis", valueKey: "id", textKey: (d) => d.client_name + " — " + d.service_title + " (N°" + d.id + ")" },
+      { name: "type_service", label: "Service *", type: "select", source: "/api/admin/types_service", valueKey: "id", textKey: (s) => s.title },
+      { name: "status", label: "Statut", type: "select", options: ["en_attente", "en_cours", "termine", "cloture", "annule"] },
+      { name: "start_date", label: "Date de début (AAAA-MM-JJ)", type: "date" },
+      { name: "due_date", label: "Échéance (AAAA-MM-JJ)", type: "date" },
+      { name: "notes", label: "Notes", type: "textarea" },
+    ],
   };
 
   const COLUMNS = {
@@ -186,6 +195,7 @@ const BalanceAdmin = (() => {
       { key: "id", label: "N°" },
       { key: "client_name", label: "Client" },
       { key: "service_title", label: "Service" },
+      { key: "dossier_label", label: "Dossier" },
       { key: "status", label: "Statut" },
       { key: "start_date", label: "Début" },
       { key: "due_date", label: "Échéance" },
@@ -249,23 +259,40 @@ const BalanceAdmin = (() => {
     ],
   };
 
+  const DETAIL_TABLES = ["client_service_suivis", "service_followups", "dossier_tasks"];
+
   async function loadTab(tab) {
     const wrap = document.getElementById("tab-content");
-    wrap.innerHTML = "<p>Chargement…</p>";
+    const detail = DETAIL_TABLES.includes(tab);
+    const searchHtml = detail
+      ? `<div class="tab-toolbar"><input id="id-search" placeholder="Filtrer par N° (ID)…" oninput="BalanceAdmin.searchById()" /><small>Recherche par identifiant du dossier / service / tâche</small></div>`
+      : "";
+    wrap.innerHTML = `<div id="tab-toolbar">${searchHtml}</div><div id="tab-table"><p>Chargement…</p></div>`;
     try {
       const data = await api(`/api/admin/${tab}`);
       renderTable(tab, data.items || []);
     } catch (e) {
-      wrap.innerHTML = `<div class="alert show alert-error">${e.message}</div>`;
+      document.getElementById("tab-table").innerHTML = `<div class="alert show alert-error">${e.message}</div>`;
+    }
+  }
+
+  async function searchById() {
+    const val = document.getElementById("id-search").value.trim();
+    try {
+      const data = await api(`/api/admin/${currentTab}${val ? "?q=" + encodeURIComponent(val) : ""}`);
+      renderTable(currentTab, data.items || []);
+    } catch (e) {
+      document.getElementById("tab-table").innerHTML = `<div class="alert show alert-error">${e.message}</div>`;
     }
   }
 
   function renderTable(tab, items) {
-    const wrap = document.getElementById("tab-content");
+    const wrap = document.getElementById("tab-table");
     if (!items.length) {
       wrap.innerHTML = '<p style="color:#64748b">Aucun élément pour le moment.</p>';
       return;
     }
+    const detail = DETAIL_TABLES.includes(tab);
     const cols = COLUMNS[tab];
     const head = cols.map((c) => `<th>${c.label}</th>`).join("");
     const body = items
@@ -288,10 +315,94 @@ const BalanceAdmin = (() => {
             return `<td>${value == null || value === "" ? "—" : escapeHtml(String(value))}</td>`;
           })
           .join("");
-        return `<tr>${cells}</tr>`;
+        const btn = detail
+          ? `<td><button class="btn btn-sm" onclick="BalanceAdmin.showDetail('${tab}', ${item.id})">Détail</button></td>`
+          : `<td></td>`;
+        return `<tr>${cells}${btn}</tr>`;
       })
       .join("");
     wrap.innerHTML = `<table class="admin-table"><thead><tr>${head}<th></th></tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  function statusBadge(statut) {
+    const cls = { "Clôturé": "confirme", "Payé": "confirme", "Validé / déposé / conforme": "confirme", "Déposé (Validé)": "confirme", "Terminé": "confirme", "En retard": "annule", "En retard / impayé": "annule", "Annulé": "annule", "Annulée": "annule" };
+    return `<span class="badge ${cls[statut] || "nouveau"}">${statut}</span>`;
+  }
+
+  async function showDetail(tab, id) {
+    try {
+      const data = await api(`/api/admin/detail/${tab}/${id}`);
+      const it = data.item;
+      document.getElementById("admin-detail-overlay").style.display = "flex";
+      const wrap = document.getElementById("admin-detail-body");
+      let html = "";
+      if (it.type === "dossier") {
+        html = `
+          <h3>Dossier N°${it.id} — ${escapeHtml(it.service)}</h3>
+          <p class="muted-sm">Client : <strong>${escapeHtml(it.client_name)}</strong> · ${escapeHtml(it.client_contact)}</p>
+          <table class="admin-table">
+            <tr><td>Service</td><td><strong>${escapeHtml(it.service)}</strong> (dans le dossier)</td></tr>
+            <tr><td>Prix (TND)</td><td>${it.montant}</td></tr>
+            <tr><td>Fréquence</td><td>${it.frequence}</td></tr>
+            <tr><td>Échéance</td><td>${it.date_echeance}</td></tr>
+            <tr><td>Statut dossier</td><td>${statusBadge(it.statut_service)}</td></tr>
+            <tr><td>Statut paiement</td><td>${statusBadge(it.statut_paiement)}</td></tr>
+            <tr><td>Notes</td><td>${escapeHtml(it.commentaire || "—")}</td></tr>
+          </table>
+          <h4>Tâches du dossier</h4>
+          ${it.tasks.length ? `<ul class="task-list">${it.tasks.map((t) => `<li>${statusBadge(t.statut)} ${escapeHtml(t.titre)} — <small>${t.date_echeance} · ${t.repetition}</small></li>`).join("")}</ul>` : '<p class="muted-sm">Aucune tâche.</p>'}
+          <h4>Suivi du service (dans le dossier)</h4>
+          ${it.service_followups.length ? `<ul class="task-list">${it.service_followups.map((s) => `<li>${statusBadge(s.status)} ${escapeHtml(s.service)} — <small>début ${s.start_date} · fin ${s.due_date}</small>${s.tasks.length ? `<br><small>↳ Tâches : ${s.tasks.map((t) => escapeHtml(t.titre)).join(", ")}</small>` : ""}</li>`).join("")}</ul>` : '<p class="muted-sm">Aucun suivi de service lié.</p>'}
+          <h4>Préfactures</h4>
+          ${it.prefactures.length ? `<ul class="task-list">${it.prefactures.map((p) => `<li>${escapeHtml(p.numero)} — ${p.montant_ttc} TND — ${statusBadge(p.statut)}</li>`).join("")}</ul>` : '<p class="muted-sm">Aucune préfacture.</p>'}`;
+      } else if (it.type === "service") {
+        html = `
+          <h3>Suivi service N°${it.id} — ${escapeHtml(it.service)}</h3>
+          <p class="muted-sm">Client : <strong>${escapeHtml(it.client_name)}</strong></p>
+          <table class="admin-table">
+            <tr><td>Statut</td><td>${statusBadge(it.status)}</td></tr>
+            <tr><td>Début / Fin</td><td>${it.start_date} → ${it.due_date}</td></tr>
+            <tr><td>Notes</td><td>${escapeHtml(it.notes || "—")}</td></tr>
+          </table>
+          ${it.dossier ? `
+            <h4>Dossier associé (service inclus dans le dossier)</h4>
+            <table class="admin-table">
+              <tr><td>Dossier</td><td>N°${it.dossier.id} — ${escapeHtml(it.dossier.service)}</td></tr>
+              <tr><td>Prix (TND)</td><td>${it.dossier.montant}</td></tr>
+              <tr><td>Fréquence</td><td>${it.dossier.frequence}</td></tr>
+              <tr><td>Échéance</td><td>${it.dossier.date_echeance}</td></tr>
+              <tr><td>Statut dossier</td><td>${statusBadge(it.dossier.statut_service)}</td></tr>
+              <tr><td>Statut paiement</td><td>${statusBadge(it.dossier.statut_paiement)}</td></tr>
+            </table>
+            <h4>Tâches du service (issues du dossier)</h4>
+            ${it.dossier.tasks.length ? `<ul class="task-list">${it.dossier.tasks.map((t) => `<li>${statusBadge(t.statut)} ${escapeHtml(t.titre)} — <small>${t.date_echeance} · ${t.repetition}</small></li>`).join("")}</ul>` : '<p class="muted-sm">Aucune tâche.</p>'}`
+          : '<p class="muted-sm">Aucun dossier associé à ce suivi de service.</p>'}`;
+      } else if (it.type === "task") {
+        html = `
+          <h3>Tâche N°${it.id} — ${escapeHtml(it.titre)}</h3>
+          <table class="admin-table">
+            <tr><td>Statut</td><td>${statusBadge(it.statut)}</td></tr>
+            <tr><td>Échéance</td><td>${it.date_echeance}</td></tr>
+            <tr><td>Répétition</td><td>${it.repetition}</td></tr>
+            <tr><td>Description</td><td>${escapeHtml(it.description || "—")}</td></tr>
+          </table>
+          <h4>Dossier (tâche incluse dans le dossier)</h4>
+          <table class="admin-table">
+            <tr><td>Dossier</td><td>N°${it.dossier.id} — ${escapeHtml(it.dossier.service)}</td></tr>
+            <tr><td>Client</td><td>${escapeHtml(it.dossier.client_name)}</td></tr>
+            <tr><td>Statut dossier</td><td>${statusBadge(it.dossier.statut_service)}</td></tr>
+            <tr><td>Statut paiement</td><td>${statusBadge(it.dossier.statut_paiement)}</td></tr>
+            <tr><td>Prix (TND)</td><td>${it.dossier.montant}</td></tr>
+          </table>`;
+      }
+      wrap.innerHTML = html;
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function closeDetail() {
+    document.getElementById("admin-detail-overlay").style.display = "none";
   }
 
   async function updateStatus(select) {
@@ -424,5 +535,5 @@ const BalanceAdmin = (() => {
     }
   });
 
-  return { login, logout, switchTab, updateStatus, toggleCreate };
+  return { login, logout, switchTab, updateStatus, toggleCreate, showDetail, closeDetail, searchById };
 })();
