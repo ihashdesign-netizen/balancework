@@ -9,6 +9,10 @@ const BalanceAdmin = (() => {
     messages: ["nouveau", "traite", "annule"],
     payments: ["en_attente", "partiel", "paye", "retard", "annule"],
     service_followups: ["en_attente", "en_cours", "termine", "cloture", "annule"],
+    client_service_suivis: {
+      statut_paiement: ["en_attente", "paye", "retard"],
+      statut_service: ["en_cours", "valide", "cloture"],
+    },
   };
 
   function token() {
@@ -131,6 +135,16 @@ const BalanceAdmin = (() => {
       { key: "slug", label: "Identifiant" },
       { key: "short_desc", label: "Résumé" },
     ],
+    client_service_suivis: [
+      { key: "id", label: "N°" },
+      { key: "client_name", label: "Client" },
+      { key: "service_title", label: "Service" },
+      { key: "montant", label: "Montant (TND)" },
+      { key: "statut_paiement", label: "Paiement" },
+      { key: "statut_service", label: "Dossier" },
+      { key: "date_echeance", label: "Échéance" },
+      { key: "commentaire", label: "Notes" },
+    ],
   };
 
   async function loadTab(tab) {
@@ -157,11 +171,12 @@ const BalanceAdmin = (() => {
         const cells = cols
           .map((c) => {
             const value = item[c.key];
-            if (c.key === "status") {
-              return `<td><select class="status-select" data-table="${tab}" data-id="${item.id}" onchange="BalanceAdmin.updateStatus(this)">
-                ${(STATUS_OPTIONS[tab] || [])
-                  .map((s) => `<option value="${s}" ${value === s ? "selected" : ""}>${s}</option>`)
-                  .join("")}
+            if (c.key === "status" || c.key === "statut_paiement" || c.key === "statut_service") {
+              const opts = Array.isArray(STATUS_OPTIONS[tab])
+                ? STATUS_OPTIONS[tab]
+                : (STATUS_OPTIONS[tab] || {})[c.key] || [];
+              return `<td><select class="status-select" data-table="${tab}" data-field="${c.key}" data-id="${item.id}" onchange="BalanceAdmin.updateStatus(this)">
+                ${opts.map((s) => `<option value="${s}" ${value === s ? "selected" : ""}>${s}</option>`).join("")}
               </select></td>`;
             }
             return `<td>${value == null || value === "" ? "—" : escapeHtml(String(value))}</td>`;
@@ -177,7 +192,11 @@ const BalanceAdmin = (() => {
     try {
       await api(`/api/admin/${select.dataset.table}`, {
         method: "PUT",
-        body: JSON.stringify({ id: Number(select.dataset.id), status: select.value }),
+        body: JSON.stringify({
+          id: Number(select.dataset.id),
+          field: select.dataset.field || "status",
+          status: select.value,
+        }),
       });
     } catch (e) {
       alert(e.message);

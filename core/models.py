@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 
@@ -114,12 +115,18 @@ class Appointment(models.Model):
 
 
 class Client(models.Model):
-    """Client du cabinet (espace admin)."""
+    """Client du cabinet (espace admin + espace client)."""
 
+    user = models.OneToOneField(
+        User, null=True, blank=True, on_delete=models.CASCADE, verbose_name="Compte utilisateur"
+    )
     name = models.CharField(max_length=120, verbose_name="Nom")
-    email = models.EmailField(blank=True, verbose_name="E-mail")
+    prenom = models.CharField(max_length=120, blank=True, verbose_name="Prénom")
+    email = models.EmailField(verbose_name="E-mail")
     phone = models.CharField(max_length=30, blank=True, verbose_name="Téléphone")
     company = models.CharField(max_length=120, blank=True, verbose_name="Société")
+    matricule_fiscale = models.CharField(max_length=100, blank=True, verbose_name="Matricule fiscale")
+    cin = models.CharField(max_length=8, blank=True, verbose_name="Numéro de carte d'identité")
     notes = models.TextField(blank=True, verbose_name="Notes")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Ajouté le")
 
@@ -129,7 +136,59 @@ class Client(models.Model):
         verbose_name_plural = "Clients"
 
     def __str__(self):
-        return f"{self.name} ({self.company or '—'})"
+        return f"{self.prenom or self.name} {self.name} ({self.company or self.matricule_fiscale or '—'})"
+
+
+class ClientServiceSuivi(models.Model):
+    """Suivi d'un dossier / service pour un client (Balance & Safety)."""
+
+    STATUT_PAIEMENT_CHOICES = [
+        ("en_attente", "En attente"),
+        ("paye", "Payé"),
+        ("retard", "En retard / impayé"),
+    ]
+    STATUT_SERVICE_CHOICES = [
+        ("en_cours", "En cours de traitement"),
+        ("valide", "Validé / déposé / conforme"),
+        ("cloture", "Clôturé"),
+    ]
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="services", verbose_name="Client")
+    type_service = models.ForeignKey(
+        Service, null=True, blank=True, on_delete=models.PROTECT, verbose_name="Type de service"
+    )
+    montant = models.DecimalField(max_digits=10, decimal_places=3, verbose_name="Montant (TND)")
+    statut_paiement = models.CharField(max_length=20, choices=STATUT_PAIEMENT_CHOICES, default="en_attente", verbose_name="Statut de paiement")
+    statut_service = models.CharField(max_length=20, choices=STATUT_SERVICE_CHOICES, default="en_cours", verbose_name="Suivi du service")
+    date_echeance = models.DateField(verbose_name="Échéance fiscale / sociale")
+    commentaire = models.TextField(blank=True, verbose_name="Notes / remarques (ex : accusé TEJ)")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
+
+    class Meta:
+        ordering = ["date_echeance", "-id"]
+        verbose_name = "Suivi & paiement client"
+        verbose_name_plural = "Suivis & paiements clients"
+
+    def __str__(self):
+        return f"{self.client.name} — {self.type_service or '—'}"
+
+    @property
+    def client_name(self):
+        return self.client.name
+
+    @property
+    def service_title(self):
+        return self.type_service.title if self.type_service else "—"
+
+
+class AuthToken(models.Model):
+    """Jeton d'accès à l'espace client."""
+
+    key = models.CharField(max_length=64, unique=True, verbose_name="Jeton")
+    user = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name="Utilisateur")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
+
+    def __str__(self):
+        return f"Token {self.user.username}"
 
 
 class Payment(models.Model):

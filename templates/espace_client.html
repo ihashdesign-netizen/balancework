@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Espace client | {{ site_name }}{% endblock %}
+{% block description %}Connectez-vous à votre espace client pour consulter l'avancement de vos dossiers et le suivi de vos paiements.{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="container form-card" style="max-width:860px">
+
+    <div id="client-alert" class="alert"></div>
+
+    <div id="auth-box">
+      <div class="grid-2">
+        <div class="card">
+          <h2 class="section-title" style="font-size:24px">Connexion</h2>
+          <p class="section-sub" style="margin-bottom:20px">Déjà client ? Accédez à vos dossiers.</p>
+          <form id="login-form" novalidate>
+            <div class="form-group">
+              <label for="login-email">E-mail *</label>
+              <input id="login-email" type="email" required placeholder="vous@exemple.com" />
+            </div>
+            <div class="form-group">
+              <label for="login-password">Mot de passe *</label>
+              <input id="login-password" type="password" required placeholder="Votre mot de passe" />
+            </div>
+            <button class="btn btn-lg btn-block" type="submit">Se connecter</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title" style="font-size:24px">Créer un compte</h2>
+          <p class="section-sub" style="margin-bottom:20px">Inscrivez-vous avec votre matricule fiscal ou votre carte d'identité.</p>
+          <form id="register-form" novalidate>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="reg-name">Nom *</label>
+                <input id="reg-name" required placeholder="Votre nom" />
+              </div>
+              <div class="form-group">
+                <label for="reg-prenom">Prénom *</label>
+                <input id="reg-prenom" required placeholder="Votre prénom" />
+              </div>
+              <div class="form-group">
+                <label for="reg-email">E-mail *</label>
+                <input id="reg-email" type="email" required placeholder="vous@exemple.com" />
+              </div>
+              <div class="form-group">
+                <label for="reg-phone">Téléphone *</label>
+                <input id="reg-phone" type="tel" required placeholder="+216 XX XXX XXX" />
+              </div>
+              <div class="form-group">
+                <label for="reg-matricule">Matricule fiscale</label>
+                <input id="reg-matricule" placeholder="Ex : 1234567/A/M/000" />
+              </div>
+              <div class="form-group">
+                <label for="reg-cin">N° carte d'identité</label>
+                <input id="reg-cin" maxlength="8" placeholder="8 chiffres" />
+              </div>
+              <div class="form-group full">
+                <label for="reg-password">Mot de passe *</label>
+                <input id="reg-password" type="password" required placeholder="Au moins 8 caractères" />
+              </div>
+            </div>
+            <p class="form-note">* Champs obligatoires. Renseignez au moins le matricule fiscal <strong>ou</strong> le numéro de carte d'identité.</p>
+            <button class="btn btn-lg btn-block" type="submit" style="margin-top:8px">Créer mon compte</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="dashboard-box" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <div>
+          <h2 class="section-title" style="margin:0">Mes dossiers et services</h2>
+          <p id="client-welcome" style="color:#64748b;margin:6px 0 0"></p>
+        </div>
+        <button class="btn btn-outline" onclick="BalanceClient.logout()">Déconnexion</button>
+      </div>
+      <div id="dashboard-content"><p>Chargement…</p></div>
+    </div>
+
+  </div>
+</section>
+
+{% endblock %}
+{% block extra_js %}
+<script src="{% static 'js/client.js' %}"></script>
+{% endblock %}

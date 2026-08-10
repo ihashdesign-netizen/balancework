@@ -34,6 +34,7 @@ PAGES = [
     ("/contact/", "contact/index.html"),
     ("/rendezvous/", "rendezvous/index.html"),
     ("/gestion/", "gestion/index.html"),
+    ("/espace-client/", "espace-client/index.html"),
 ]
 
 client = Client()

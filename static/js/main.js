@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: "/services/", label: "Services" },
   { href: "/devis/", label: "Devis" },
   { href: "/rendezvous/", label: "Rendez-vous" },
+  { href: "/espace-client/", label: "Espace client" },
   { href: "/contact/", label: "Contact" },
 ];
 
@@ -18,6 +19,7 @@ const FOOTER_LINKS = [
   { href: "/services/", label: "Nos services" },
   { href: "/devis/", label: "Demander un devis" },
   { href: "/rendezvous/", label: "Prendre rendez-vous" },
+  { href: "/espace-client/", label: "Espace client" },
   { href: "/contact/", label: "Nous contacter" },
   { href: "/gestion/", label: "Espace admin" },
 ];

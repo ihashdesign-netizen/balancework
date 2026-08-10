@@ -1,13 +1,26 @@
 """Vues de l'application Balance And Tax Safety."""
 import json
+import secrets
 from datetime import date, timedelta
 
 from django.conf import settings
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import Appointment, Client, DevisRequest, Message, Payment, Service, ServiceFollowUp
+from .models import (
+    Appointment,
+    AuthToken,
+    Client,
+    ClientServiceSuivi,
+    DevisRequest,
+    Message,
+    Payment,
+    Service,
+    ServiceFollowUp,
+)
 from .mail import send_auto_reply_and_notify
 
 OPENING_HOURS = range(9, 17)
@@ -210,6 +223,104 @@ def api_rendezvous(request):
     })
 
 
+# ---------------- API Client (Espace client) ----------------
+
+def _bearer_token(request) -> str:
+    header = request.headers.get("Authorization", "")
+    if header.startswith("Bearer "):
+        return header[7:].strip()
+    return ""
+
+
+def _client_from_request(request):
+    token = AuthToken.objects.filter(key=_bearer_token(request)).select_related("user").first()
+    if not token:
+        return None
+    client = Client.objects.filter(user=token.user).first()
+    return client
+
+
+@csrf_exempt
+def api_client_register(request):
+    if request.method != "POST":
+        return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
+    body = _read_body(request)
+    name = (body.get("name") or "").strip()
+    prenom = (body.get("prenom") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    phone = (body.get("phone") or "").strip()
+    password = body.get("password") or ""
+    matricule = (body.get("matricule_fiscale") or "").strip()
+    cin = (body.get("cin") or "").strip()
+
+    missing = [f for f in ("name", "prenom", "email", "phone", "password") if not body.get(f)]
+    if missing:
+        return _json({"ok": False, "error": f"Champs manquants : {', '.join(missing)}"}, 400)
+    if not matricule and not cin:
+        return _json({"ok": False, "error": "Indiquez au moins le matricule fiscal ou le numéro de carte d'identité."}, 400)
+    if User.objects.filter(username=email).exists():
+        return _json({"ok": False, "error": "Un compte existe déjà avec cet e-mail."}, 400)
+
+    user = User.objects.create_user(username=email, email=email, first_name=prenom, last_name=name, password=password)
+    client = Client.objects.create(
+        user=user, name=name, prenom=prenom, email=email, phone=phone,
+        matricule_fiscale=matricule, cin=cin,
+    )
+    token = AuthToken.objects.create(key=secrets.token_hex(32), user=user)
+    return _json({"ok": True, "token": token.key, "client": _client_payload(client)})
+
+
+@csrf_exempt
+def api_client_login(request):
+    if request.method != "POST":
+        return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
+    body = _read_body(request)
+    email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
+    user = authenticate(username=email, password=password)
+    if not user or not hasattr(user, "client"):
+        return _json({"ok": False, "error": "Identifiants invalides."}, 401)
+    token, created = AuthToken.objects.get_or_create(user=user)
+    token.key = secrets.token_hex(32)
+    token.save(update_fields=["key"])
+    return _json({"ok": True, "token": token.key, "client": _client_payload(user.client)})
+
+
+@csrf_exempt
+def api_client_logout(request):
+    AuthToken.objects.filter(key=_bearer_token(request)).delete()
+    return _json({"ok": True})
+
+
+@csrf_exempt
+def api_client_dashboard(request):
+    client = _client_from_request(request)
+    if not client:
+        return _json({"ok": False, "error": "Non autorisé"}, 401)
+    suivis = []
+    for s in ClientServiceSuivi.objects.filter(client=client):
+        suivis.append({
+            "id": s.id,
+            "service": s.service_title,
+            "montant": str(s.montant),
+            "statut_paiement": s.get_statut_paiement_display(),
+            "statut_service": s.get_statut_service_display(),
+            "date_echeance": s.date_echeance.strftime("%d/%m/%Y"),
+            "commentaire": s.commentaire,
+        })
+    return _json({"ok": True, "client": _client_payload(client), "suivis": suivis})
+
+
+def _client_payload(client):
+    return {
+        "name": f"{client.prenom} {client.name}".strip(),
+        "email": client.email,
+        "phone": client.phone,
+        "matricule_fiscale": client.matricule_fiscale,
+        "cin": client.cin,
+    }
+
+
 # ---------------- API Admin (jeton Bearer) ----------------
 
 def _authorized(request) -> bool:
@@ -225,6 +336,7 @@ TABLES = {
     "payments": (Payment, ["id", "client_name", "amount", "date", "status", "method", "notes", "created_at"], None),
     "service_followups": (ServiceFollowUp, ["id", "client_name", "service_title", "status", "start_date", "due_date", "notes", "created_at"], None),
     "types_service": (Service, ["id", "title", "slug", "short_desc"], None),
+    "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "commentaire"], None),
 }
 
 
@@ -252,12 +364,20 @@ def api_admin(request, table):
             obj = model.objects.get(pk=int(body.get("id", 0)))
         except (ValueError, model.DoesNotExist):
             return _json({"ok": False, "error": "Élément introuvable"}, 404)
-        status = body.get("status", "")
-        valid = {s for s, _ in getattr(obj, "STATUS_CHOICES", [])}
-        if status not in valid:
+        field = body.get("field", "status")
+        choices_attr = {
+            "status": "STATUS_CHOICES",
+            "statut_paiement": "STATUT_PAIEMENT_CHOICES",
+            "statut_service": "STATUT_SERVICE_CHOICES",
+        }.get(field)
+        if not choices_attr or not hasattr(obj, field):
+            return _json({"ok": False, "error": "Champ invalide"}, 400)
+        value = body.get("status", "")
+        valid = {s for s, _ in getattr(obj, choices_attr, [])}
+        if value not in valid:
             return _json({"ok": False, "error": "Statut invalide"}, 400)
-        obj.status = status
-        obj.save(update_fields=["status"])
+        setattr(obj, field, value)
+        obj.save(update_fields=[field])
         return _json({"ok": True})
 
     return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
