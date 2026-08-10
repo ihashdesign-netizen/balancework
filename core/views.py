@@ -76,7 +76,7 @@ def _service_title(service):
 @require_GET
 def api_services(request):
     services = list(Service.objects.values(
-        "slug", "title", "short_desc", "description", "icon", "price_hint"
+        "slug", "title", "short_desc", "description", "icon"
     ))
     return _json({"ok": True, "services": services})
 

@@ -225,7 +225,6 @@ async function loadServices(targetId) {
         <div class="feature-icon">${iconSvg(icons[s.icon] || "briefcase")}</div>
         <h3>${s.title}</h3>
         <p>${s.short_desc}</p>
-        <span class="price-hint">${s.price_hint || ""}</span>
         <p style="font-size:14px">${s.description}</p>
         <a class="btn" href="/devis/?service=${s.slug}">Demander un devis</a>
       </div>`,
