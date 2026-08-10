@@ -369,6 +369,7 @@ def api_client_dashboard(request):
             "statut_service": s.get_statut_service_display(),
             "date_echeance": s.date_echeance.strftime("%d/%m/%Y") if s.date_echeance else "—",
             "commentaire": s.commentaire,
+            "service_note": s.service_note,
             "tasks": tasks,
             "prefactures": prefactures,
             "attachments": attachments,
@@ -432,9 +433,12 @@ def api_client_prefacture(request, prefacture_id):
 def _client_payload(client):
     return {
         "id": client.id,
-        "name": f"{client.prenom} {client.name}".strip(),
+        "name": client.name,
+        "prenom": client.prenom,
+        "display_name": f"{client.prenom} {client.name}".strip(),
         "email": client.email,
         "phone": client.phone,
+        "adresse": client.adresse,
         "matricule_fiscale": client.matricule_fiscale,
         "cin": client.cin,
     }
@@ -462,8 +466,75 @@ def api_client_create_dossier(request):
         statut_paiement="en_attente",
         statut_service="en_cours",
         commentaire=description,
+        service_note=(body.get("service_note") or "").strip(),
     )
     return _json({"ok": True, "id": obj.id, "message": "Dossier ouvert. Le cabinet vous répondra rapidement."})
+
+
+@csrf_exempt
+def api_client_update_dossier(request, dossier_id):
+    client = _client_from_request(request)
+    if not client:
+        return _json({"ok": False, "error": "Non autorisé"}, 401)
+    dossier = ClientServiceSuivi.objects.filter(pk=dossier_id, client=client).first()
+    if not dossier:
+        return _json({"ok": False, "error": "Dossier introuvable"}, 404)
+    if request.method != "PUT":
+        return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
+    if dossier.statut_service != "en_cours":
+        return _json({"ok": False, "error": "Modification possible uniquement pour un dossier en cours de traitement."}, 400)
+    body = _read_body(request)
+    fields_to_update = []
+    if "description" in body:
+        description = (body.get("description") or "").strip()
+        if not description:
+            return _json({"ok": False, "error": "La note du dossier ne peut pas être vide."}, 400)
+        dossier.commentaire = description
+        fields_to_update.append("commentaire")
+    if "service_note" in body:
+        dossier.service_note = (body.get("service_note") or "").strip()
+        fields_to_update.append("service_note")
+    if fields_to_update:
+        dossier.save(update_fields=fields_to_update)
+    return _json({"ok": True, "message": "Dossier modifié."})
+
+
+@csrf_exempt
+def api_client_profile(request):
+    client = _client_from_request(request)
+    if not client:
+        return _json({"ok": False, "error": "Non autorisé"}, 401)
+    if request.method != "PUT":
+        return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
+    body = _read_body(request)
+
+    def _clean(key, maxlen=200):
+        return (body.get(key) or "").strip()[:maxlen]
+
+    if "name" in body:
+        if not _clean("name"):
+            return _json({"ok": False, "error": "Le nom est obligatoire."}, 400)
+        client.name = _clean("name")
+    if "prenom" in body:
+        client.prenom = _clean("prenom")
+    if "phone" in body:
+        client.phone = _clean("phone", 30)
+    if "adresse" in body:
+        client.adresse = _clean("adresse", 300)
+    if "matricule_fiscale" in body:
+        client.matricule_fiscale = _clean("matricule_fiscale", 50)
+    if "cin" in body:
+        client.cin = _clean("cin", 50)
+    if body.get("new_password"):
+        old = body.get("old_password") or ""
+        if not client.user or not client.user.check_password(old):
+            return _json({"ok": False, "error": "Mot de passe actuel incorrect."}, 400)
+        if len(body["new_password"]) < 6:
+            return _json({"ok": False, "error": "Le nouveau mot de passe doit faire au moins 6 caractères."}, 400)
+        client.user.set_password(body["new_password"])
+        client.user.save()
+    client.save()
+    return _json({"ok": True, "message": "Profil mis à jour."})
 
 
 @csrf_exempt
@@ -559,7 +630,7 @@ TABLES = {
     "payments": (Payment, ["id", "client_name", "amount", "date", "status", "method", "notes", "created_at"], None),
     "service_followups": (ServiceFollowUp, ["id", "client_name", "service_title", "dossier_id", "dossier_label", "status", "start_date", "due_date", "notes", "created_at"], None),
     "types_service": (Service, ["id", "title", "slug", "short_desc"], None),
-    "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "frequence", "commentaire"], None),
+    "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "frequence", "commentaire", "service_note"], None),
     "client_messages": (ClientMessage, ["id", "client_name", "direction", "text", "created_at"], None),
     "dossier_tasks": (DossierTask, ["id", "client_name", "dossier_service", "titre", "statut", "date_echeance", "repetition"], None),
     "prefactures": (Prefacture, ["id", "client_name", "dossier_service", "numero", "date", "montant_ht", "taux_tva", "montant_ttc", "statut"], None),
@@ -629,12 +700,12 @@ def api_admin(request, table):
                 value = float(value)
             except ValueError:
                 return _json({"ok": False, "error": "Valeur invalide"}, 400)
-        elif field == "date_echeance" or field == "date_echeance_legale":
+        elif field == "date_echeance" or field == "date_echeance_legale" or field == "start_date" or field == "due_date":
             try:
                 date.fromisoformat(value)
             except ValueError:
                 return _json({"ok": False, "error": "Date invalide (AAAA-MM-JJ)"}, 400)
-        elif field in ("commentaire", "notes", "numero_quittance_ou_tej", "notes_collaborateur"):
+        elif field in ("commentaire", "notes", "numero_quittance_ou_tej", "notes_collaborateur", "service_note", "titre", "description", "periode"):
             value = str(value)
         else:
             return _json({"ok": False, "error": "Champ non modifiable"}, 400)
@@ -675,6 +746,7 @@ def _dossier_payload(d):
         "statut_service": d.get_statut_service_display(),
         "date_echeance": d.date_echeance.strftime("%d/%m/%Y") if d.date_echeance else "—",
         "commentaire": d.commentaire,
+        "service_note": d.service_note,
         "tasks": [_task_payload(t) for t in d.tasks.all()],
         "prefactures": [
             {"id": p.id, "numero": p.numero, "date": p.date.strftime("%d/%m/%Y"), "montant_ttc": str(p.montant_ttc), "statut": p.get_statut_display()}
@@ -834,7 +906,26 @@ def _api_admin_create(request, table):
             statut_service=service_statut,
             date_echeance=echeance or None,
             commentaire=(body.get("commentaire") or "").strip(),
+            service_note=(body.get("service_note") or "").strip(),
         )
+        titre = (body.get("tache_titre") or "").strip()
+        if titre:
+            task_echeance = (body.get("tache_echeance") or "").strip()
+            if task_echeance:
+                try:
+                    date.fromisoformat(task_echeance)
+                except ValueError:
+                    return _json({"ok": False, "error": "Date d'échéance de la tâche invalide."}, 400)
+            repetition = body.get("tache_repetition", "ponctuel")
+            valid_r = {s for s, _ in DossierTask.REPETITION_CHOICES}
+            if repetition not in valid_r:
+                repetition = "ponctuel"
+            DossierTask.objects.create(
+                dossier=obj,
+                titre=titre,
+                date_echeance=task_echeance or None,
+                repetition=repetition,
+            )
         return _json({"ok": True, "id": obj.id})
 
     if table == "prefactures":

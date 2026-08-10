@@ -87,8 +87,12 @@
           <div id="dossier-form" style="display:none;margin-top:14px">
             <p id="dos-service-label" style="font-weight:700;margin:0 0 8px"></p>
             <div class="form-group">
-              <label for="dos-description">Description du besoin *</label>
+              <label for="dos-description">Note du dossier (description du besoin) *</label>
               <textarea id="dos-description" rows="3" placeholder="Décrivez votre situation, période concernée, éléments fournis…"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="dos-service-note">Note du service</label>
+              <textarea id="dos-service-note" rows="2" placeholder="Précisions pour le service choisi (optionnel)…"></textarea>
             </div>
             <div style="display:flex;gap:8px">
               <button class="btn" onclick="BalanceClient.openDossier()">Ouvrir le dossier</button>
@@ -110,6 +114,49 @@
 
       <div id="declarations-content"><p>Chargement…</p></div>
       <div id="dashboard-content"><p>Chargement…</p></div>
+
+      <div class="card" style="margin-top:24px">
+        <h3>Mon profil</h3>
+        <p style="color:#64748b;font-size:14px;margin:0 0 14px">Mettez à jour vos informations personnelles et votre mot de passe.</p>
+        <div id="profile-alert" class="alert"></div>
+        <form id="profile-form" class="form-grid" onsubmit="event.preventDefault();BalanceClient.saveProfile()" style="margin:0">
+          <div class="form-group">
+            <label for="prof-name">Nom *</label>
+            <input id="prof-name" required />
+          </div>
+          <div class="form-group">
+            <label for="prof-prenom">Prénom</label>
+            <input id="prof-prenom" />
+          </div>
+          <div class="form-group">
+            <label for="prof-phone">Téléphone</label>
+            <input id="prof-phone" type="tel" />
+          </div>
+          <div class="form-group">
+            <label for="prof-adresse">Adresse</label>
+            <input id="prof-adresse" />
+          </div>
+          <div class="form-group">
+            <label for="prof-matricule">Matricule fiscal</label>
+            <input id="prof-matricule" />
+          </div>
+          <div class="form-group">
+            <label for="prof-cin">N° carte d'identité</label>
+            <input id="prof-cin" maxlength="8" />
+          </div>
+          <div class="form-group">
+            <label for="prof-old-password">Mot de passe actuel (pour changer de mot de passe)</label>
+            <input id="prof-old-password" type="password" autocomplete="current-password" />
+          </div>
+          <div class="form-group">
+            <label for="prof-new-password">Nouveau mot de passe (6 caractères min.)</label>
+            <input id="prof-new-password" type="password" autocomplete="new-password" />
+          </div>
+          <div class="form-group full">
+            <button class="btn" type="submit">Enregistrer mon profil</button>
+          </div>
+        </form>
+      </div>
     </div>
 
   </div>

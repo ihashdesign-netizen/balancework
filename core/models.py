@@ -180,7 +180,8 @@ class ClientServiceSuivi(models.Model):
     statut_service = models.CharField(max_length=20, choices=STATUT_SERVICE_CHOICES, default="en_cours", verbose_name="Suivi du service")
     date_echeance = models.DateField(null=True, blank=True, verbose_name="Échéance fiscale / sociale")
     frequence = models.CharField(max_length=20, choices=FREQUENCE_CHOICES, default="ponctuel", verbose_name="Répétition du service")
-    commentaire = models.TextField(blank=True, verbose_name="Notes / remarques (ex : accusé TEJ)")
+    commentaire = models.TextField(blank=True, verbose_name="Note du dossier")
+    service_note = models.TextField(blank=True, verbose_name="Note du service (dans le dossier)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
 
     class Meta:

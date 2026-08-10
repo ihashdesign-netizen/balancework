@@ -134,6 +134,36 @@ const BalanceClient = (() => {
     </div>`;
   }
 
+  function toggleDossierEdit(id) {
+    const form = document.getElementById(`dossier-edit-${id}`);
+    form.style.display = form.style.display === "none" ? "" : "none";
+  }
+
+  async function saveDossierEdit(id) {
+    const description = document.getElementById(`de-desc-${id}`).value.trim();
+    const serviceNote = document.getElementById(`de-service-note-${id}`).value.trim();
+    if (!description) {
+      showAlert("dashboard-alert", "error", "La note du dossier ne peut pas être vide.");
+      return;
+    }
+    const btn = event.target;
+    btn.disabled = true;
+    try {
+      await api(`/api/client/dossiers/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ description, service_note: serviceNote }),
+      });
+      showAlert("dashboard-alert", "success", "Dossier modifié.");
+      api("/api/client/dashboard")
+        .then((d) => renderSuivis(d.suivis || []))
+        .catch(() => {});
+    } catch (err) {
+      showAlert("dashboard-alert", "error", err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function renderSuivis(suivis) {
     const wrap = document.getElementById("dashboard-content");
     if (!suivis.length) {
@@ -179,6 +209,18 @@ const BalanceClient = (() => {
               .join("")}</ul>`
           : '<p class="muted-sm">Aucune pièce jointe.</p>';
 
+        const canEdit = s.statut_service === "En cours de traitement";
+        const editForm = canEdit
+          ? `<button class="btn btn-sm btn-outline" onclick="BalanceClient.toggleDossierEdit(${s.id})">Modifier la note</button>
+          <div class="dossier-edit" id="dossier-edit-${s.id}" style="display:none">
+            <label for="de-desc-${s.id}">Note du dossier</label>
+            <textarea id="de-desc-${s.id}" rows="2">${escapeHtml(s.commentaire || "")}</textarea>
+            <label for="de-service-note-${s.id}">Note du service (dans le dossier)</label>
+            <textarea id="de-service-note-${s.id}" rows="2">${escapeHtml(s.service_note || "")}</textarea>
+            <button class="btn btn-sm" onclick="BalanceClient.saveDossierEdit(${s.id})">Enregistrer</button>
+          </div>`
+          : "";
+
         return `<div class="dossier-card">
           <div class="dossier-head">
             <div>
@@ -191,6 +233,8 @@ const BalanceClient = (() => {
             </div>
           </div>
           <p class="muted-sm">${escapeHtml(s.commentaire || "")}</p>
+          ${s.service_note ? `<p class="muted-sm"><strong>Note du service :</strong> ${escapeHtml(s.service_note)}</p>` : ""}
+          <div class="dossier-actions">${editForm}</div>
           ${serviceSuivis ? `<div class="dossier-block"><strong>Suivi du service</strong>${serviceSuivis}</div>` : ""}
           <div class="dossier-block"><strong>Tâches</strong>${tasks}</div>
           ${prefactures}
@@ -327,6 +371,7 @@ const BalanceClient = (() => {
     selectedService = null;
     document.getElementById("dossier-form").style.display = "none";
     document.getElementById("dos-description").value = "";
+    document.getElementById("dos-service-note").value = "";
   }
 
   async function openDossier() {
@@ -340,7 +385,11 @@ const BalanceClient = (() => {
     try {
       const data = await api("/api/client/dossiers", {
         method: "POST",
-        body: JSON.stringify({ type_service: selectedService, description: desc }),
+        body: JSON.stringify({
+          type_service: selectedService,
+          description: desc,
+          service_note: document.getElementById("dos-service-note").value.trim(),
+        }),
       });
       showAlert("dashboard-alert", "success", data.message);
       cancelDossier();
@@ -394,11 +443,53 @@ const BalanceClient = (() => {
     return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  function populateProfile(client) {
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val || "";
+    };
+    set("prof-name", client.name);
+    set("prof-prenom", client.prenom);
+    set("prof-phone", client.phone);
+    set("prof-adresse", client.adresse);
+    set("prof-matricule", client.matricule_fiscale);
+    set("prof-cin", client.cin);
+  }
+
+  async function saveProfile() {
+    clearAlert("profile-alert");
+    const btn = event.target;
+    btn.disabled = true;
+    try {
+      await api("/api/client/profile", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: document.getElementById("prof-name").value.trim(),
+          prenom: document.getElementById("prof-prenom").value.trim(),
+          phone: document.getElementById("prof-phone").value.trim(),
+          adresse: document.getElementById("prof-adresse").value.trim(),
+          matricule_fiscale: document.getElementById("prof-matricule").value.trim(),
+          cin: document.getElementById("prof-cin").value.trim(),
+          old_password: document.getElementById("prof-old-password").value,
+          new_password: document.getElementById("prof-new-password").value,
+        }),
+      });
+      showAlert("profile-alert", "success", "Profil mis à jour.");
+      document.getElementById("prof-old-password").value = "";
+      document.getElementById("prof-new-password").value = "";
+    } catch (err) {
+      showAlert("profile-alert", "error", err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function showDashboard(client) {
     document.getElementById("auth-box").style.display = "none";
     document.getElementById("dashboard-box").style.display = "";
     document.getElementById("client-welcome").textContent =
-      `Bienvenue ${client.name}${client.matricule_fiscale ? " — Matricule : " + client.matricule_fiscale : ""}`;
+      `Bienvenue ${client.display_name || client.name}${client.matricule_fiscale ? " — Matricule : " + client.matricule_fiscale : ""}`;
+    populateProfile(client);
     renderServices();
     loadMessages();
     api("/api/client/dashboard")
@@ -422,5 +513,5 @@ const BalanceClient = (() => {
     }
   });
 
-  return { login, register, logout, openDossier, sendMessage, selectService, cancelDossier, uploadAttachment, deleteAttachment, showPrefacture, closePrefacture, printPrefacture };
+  return { login, register, logout, openDossier, sendMessage, selectService, cancelDossier, uploadAttachment, deleteAttachment, showPrefacture, closePrefacture, printPrefacture, saveProfile, toggleDossierEdit, saveDossierEdit };
 })();

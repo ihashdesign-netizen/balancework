@@ -97,7 +97,11 @@ const BalanceAdmin = (() => {
       { name: "statut_paiement", label: "Statut paiement", type: "select", options: ["en_attente", "paye", "retard"] },
       { name: "statut_service", label: "Statut dossier", type: "select", options: ["en_cours", "valide", "cloture"] },
       { name: "date_echeance", label: "Échéance (AAAA-MM-JJ)", type: "date" },
-      { name: "commentaire", label: "Notes / accusé TEJ", type: "textarea" },
+      { name: "commentaire", label: "Note du dossier", type: "textarea" },
+      { name: "service_note", label: "Note du service (dans le dossier)", type: "textarea" },
+      { name: "tache_titre", label: "Tâche — titre (optionnel)", type: "text" },
+      { name: "tache_echeance", label: "Tâche — échéance (AAAA-MM-JJ)", type: "date" },
+      { name: "tache_repetition", label: "Tâche — répétition", type: "select", options: ["ponctuel", "mensuel", "trimestriel", "semestriel", "annuel"] },
     ],
     client_messages: [
       { name: "client", label: "Client *", type: "select", source: "/api/admin/clients", valueKey: "id", textKey: (c) => c.name },
@@ -216,7 +220,8 @@ const BalanceAdmin = (() => {
       { key: "statut_service", label: "Dossier" },
       { key: "date_echeance", label: "Échéance" },
       { key: "frequence", label: "Fréquence" },
-      { key: "commentaire", label: "Notes" },
+      { key: "commentaire", label: "Note dossier" },
+      { key: "service_note", label: "Note service" },
     ],
     dossier_tasks: [
       { key: "id", label: "N°" },
@@ -260,6 +265,38 @@ const BalanceAdmin = (() => {
   };
 
   const DETAIL_TABLES = ["client_service_suivis", "service_followups", "dossier_tasks"];
+
+  const EDIT_FIELDS = {
+    client_service_suivis: {
+      montant: { type: "number", step: "0.001" },
+      frequence: { type: "select", options: ["ponctuel", "mensuel", "trimestriel", "semestriel", "annuel"] },
+      date_echeance: { type: "date" },
+      statut_paiement: { type: "select", options: ["en_attente", "paye", "retard"] },
+      statut_service: { type: "select", options: ["en_cours", "valide", "cloture"] },
+      commentaire: { type: "text" },
+      service_note: { type: "text" },
+    },
+    service_followups: {
+      status: { type: "select", options: ["en_attente", "en_cours", "termine", "cloture", "annule"] },
+      start_date: { type: "date" },
+      due_date: { type: "date" },
+      notes: { type: "text" },
+    },
+    dossier_tasks: {
+      statut: { type: "select", options: ["a_faire", "en_cours", "termine"] },
+      titre: { type: "text" },
+      date_echeance: { type: "date" },
+      repetition: { type: "select", options: ["ponctuel", "mensuel", "trimestriel", "semestriel", "annuel"] },
+    },
+    declarations: {
+      statut: { type: "select", options: ["a_faire", "en_cours", "depose", "retard"] },
+      type_declaration: { type: "select", options: ["mensuelle", "acompte", "annuelle", "autre"] },
+      date_echeance_legale: { type: "date" },
+      numero_quittance_ou_tej: { type: "text" },
+      montant_a_payer: { type: "number", step: "0.001" },
+      notes_collaborateur: { type: "text" },
+    },
+  };
 
   async function loadTab(tab) {
     const wrap = document.getElementById("tab-content");
@@ -312,6 +349,11 @@ const BalanceAdmin = (() => {
             if (c.key === "original_name" && item.url) {
               return `<td><a href="${item.url}" target="_blank" rel="noopener">${escapeHtml(String(value))}</a></td>`;
             }
+            const editCfg = (EDIT_FIELDS[tab] || {})[c.key];
+            if (editCfg && editCfg.type !== "select") {
+              const raw = value == null || value === "" ? "" : String(value);
+              return `<td><input class="inline-edit" type="${editCfg.type}" ${editCfg.step ? `step="${editCfg.step}"` : ""} data-table="${tab}" data-field="${c.key}" data-id="${item.id}" value="${escapeHtml(raw)}" onchange="BalanceAdmin.saveField(this)" /></td>`;
+            }
             return `<td>${value == null || value === "" ? "—" : escapeHtml(String(value))}</td>`;
           })
           .join("");
@@ -331,8 +373,12 @@ const BalanceAdmin = (() => {
 
   async function showDetail(tab, id) {
     try {
-      const data = await api(`/api/admin/detail/${tab}/${id}`);
+      const [data, listData] = await Promise.all([
+        api(`/api/admin/detail/${tab}/${id}`),
+        api(`/api/admin/${tab}?q=${id}`),
+      ]);
       const it = data.item;
+      const raw = (listData.items || []).find((r) => String(r.id) === String(id)) || {};
       document.getElementById("admin-detail-overlay").style.display = "flex";
       const wrap = document.getElementById("admin-detail-body");
       let html = "";
@@ -341,13 +387,13 @@ const BalanceAdmin = (() => {
           <h3>Dossier N°${it.id} — ${escapeHtml(it.service)}</h3>
           <p class="muted-sm">Client : <strong>${escapeHtml(it.client_name)}</strong> · ${escapeHtml(it.client_contact)}</p>
           <table class="admin-table">
-            <tr><td>Service</td><td><strong>${escapeHtml(it.service)}</strong> (dans le dossier)</td></tr>
-            <tr><td>Prix (TND)</td><td>${it.montant}</td></tr>
-            <tr><td>Fréquence</td><td>${it.frequence}</td></tr>
-            <tr><td>Échéance</td><td>${it.date_echeance}</td></tr>
-            <tr><td>Statut dossier</td><td>${statusBadge(it.statut_service)}</td></tr>
-            <tr><td>Statut paiement</td><td>${statusBadge(it.statut_paiement)}</td></tr>
-            <tr><td>Notes</td><td>${escapeHtml(it.commentaire || "—")}</td></tr>
+            ${editRow(tab, "montant", id, raw.montant, "Prix (TND)")}
+            ${editRow(tab, "frequence", id, raw.frequence, "Fréquence")}
+            ${editRow(tab, "date_echeance", id, raw.date_echeance, "Échéance")}
+            ${editRow(tab, "statut_service", id, raw.statut_service, "Statut dossier")}
+            ${editRow(tab, "statut_paiement", id, raw.statut_paiement, "Statut paiement")}
+            ${editRow(tab, "commentaire", id, raw.commentaire, "Note du dossier")}
+            ${editRow(tab, "service_note", id, raw.service_note, "Note du service")}
           </table>
           <h4>Tâches du dossier</h4>
           ${it.tasks.length ? `<ul class="task-list">${it.tasks.map((t) => `<li>${statusBadge(t.statut)} ${escapeHtml(t.titre)} — <small>${t.date_echeance} · ${t.repetition}</small></li>`).join("")}</ul>` : '<p class="muted-sm">Aucune tâche.</p>'}
@@ -360,9 +406,10 @@ const BalanceAdmin = (() => {
           <h3>Suivi service N°${it.id} — ${escapeHtml(it.service)}</h3>
           <p class="muted-sm">Client : <strong>${escapeHtml(it.client_name)}</strong></p>
           <table class="admin-table">
-            <tr><td>Statut</td><td>${statusBadge(it.status)}</td></tr>
-            <tr><td>Début / Fin</td><td>${it.start_date} → ${it.due_date}</td></tr>
-            <tr><td>Notes</td><td>${escapeHtml(it.notes || "—")}</td></tr>
+            ${editRow(tab, "status", id, raw.status, "Statut")}
+            ${editRow(tab, "start_date", id, raw.start_date, "Date de début")}
+            ${editRow(tab, "due_date", id, raw.due_date, "Échéance")}
+            ${editRow(tab, "notes", id, raw.notes, "Notes")}
           </table>
           ${it.dossier ? `
             <h4>Dossier associé (service inclus dans le dossier)</h4>
@@ -381,9 +428,10 @@ const BalanceAdmin = (() => {
         html = `
           <h3>Tâche N°${it.id} — ${escapeHtml(it.titre)}</h3>
           <table class="admin-table">
-            <tr><td>Statut</td><td>${statusBadge(it.statut)}</td></tr>
-            <tr><td>Échéance</td><td>${it.date_echeance}</td></tr>
-            <tr><td>Répétition</td><td>${it.repetition}</td></tr>
+            ${editRow(tab, "titre", id, raw.titre, "Tâche")}
+            ${editRow(tab, "statut", id, raw.statut, "Statut")}
+            ${editRow(tab, "date_echeance", id, raw.date_echeance, "Échéance")}
+            ${editRow(tab, "repetition", id, raw.repetition, "Répétition")}
             <tr><td>Description</td><td>${escapeHtml(it.description || "—")}</td></tr>
           </table>
           <h4>Dossier (tâche incluse dans le dossier)</h4>
@@ -405,20 +453,47 @@ const BalanceAdmin = (() => {
     document.getElementById("admin-detail-overlay").style.display = "none";
   }
 
-  async function updateStatus(select) {
+  async function saveField(el) {
     try {
-      await api(`/api/admin/${select.dataset.table}`, {
+      await api(`/api/admin/${el.dataset.table}`, {
         method: "PUT",
         body: JSON.stringify({
-          id: Number(select.dataset.id),
-          field: select.dataset.field || "status",
-          status: select.value,
+          id: Number(el.dataset.id),
+          field: el.dataset.field || "status",
+          status: el.value,
         }),
       });
+      el.classList.add("saved");
+      setTimeout(() => el.classList.remove("saved"), 1200);
     } catch (e) {
       alert(e.message);
       loadTab(currentTab);
     }
+  }
+
+  const updateStatus = saveField;
+
+  function editControl(tab, field, id, rawValue) {
+    const cfg = (EDIT_FIELDS[tab] || {})[field];
+    if (!cfg) return null;
+    const val = rawValue == null ? "" : String(rawValue);
+    const attrs = `data-table="${tab}" data-field="${field}" data-id="${id}"`;
+    if (cfg.type === "select") {
+      return `<select class="inline-edit" ${attrs} onchange="BalanceAdmin.saveField(this)">${cfg.options
+        .map((o) => `<option value="${o}" ${val === o ? "selected" : ""}>${o.replace(/_/g, " ")}</option>`)
+        .join("")}</select>`;
+    }
+    if (cfg.type === "date") {
+      return `<input class="inline-edit" type="date" ${attrs} value="${val}" onchange="BalanceAdmin.saveField(this)" />`;
+    }
+    return `<input class="inline-edit" type="${cfg.type}" ${cfg.step ? `step="${cfg.step}"` : ""} ${attrs} value="${escapeHtml(val)}" onchange="BalanceAdmin.saveField(this)" />`;
+  }
+
+  function editRow(tab, field, id, rawValue, label) {
+    const control = editControl(tab, field, id, rawValue);
+    return control
+      ? `<tr><td>${label}</td><td>${control}</td></tr>`
+      : `<tr><td>${label}</td><td>${rawValue == null || rawValue === "" ? "—" : escapeHtml(String(rawValue))}</td></tr>`;
   }
 
   function escapeHtml(str) {
@@ -535,5 +610,5 @@ const BalanceAdmin = (() => {
     }
   });
 
-  return { login, logout, switchTab, updateStatus, toggleCreate, showDetail, closeDetail, searchById };
+  return { login, logout, switchTab, saveField, toggleCreate, showDetail, closeDetail, searchById };
 })();
