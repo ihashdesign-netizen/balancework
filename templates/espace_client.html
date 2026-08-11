@@ -103,8 +103,16 @@
 
         <div class="card">
           <h3>Messagerie avec le cabinet</h3>
-          <p style="color:#64748b;font-size:14px;margin:0 0 14px">Échangez directement avec votre cabinet sur vos dossiers.</p>
-          <div id="messages-thread" style="max-height:260px;overflow:auto;margin-bottom:12px"><p style="color:#64748b">Chargement…</p></div>
+          <p style="color:#64748b;font-size:14px;margin:0 0 14px">Échangez directement avec votre cabinet, sur un dossier précis ou en général.</p>
+          <div class="form-group">
+            <label for="msg-dossier">Contexte (dossier) — filtre l'affichage et rattache l'envoi</label>
+            <select id="msg-dossier" onchange="BalanceClient.onContextChange()"><option value="">Tous les dossiers</option></select>
+          </div>
+          <div class="form-group" style="margin-top:8px">
+            <label for="msg-task">Tâche concernée (si le contexte est un dossier)</label>
+            <select id="msg-task"><option value="">— Aucune tâche précise —</option></select>
+          </div>
+          <div id="messages-thread" style="max-height:240px;overflow:auto;margin-bottom:12px"><p style="color:#64748b">Chargement…</p></div>
           <div class="form-group" style="margin-bottom:8px">
             <textarea id="msg-text" rows="2" placeholder="Votre message…"></textarea>
           </div>

@@ -362,6 +362,18 @@ class ClientMessage(models.Model):
         ("admin", "Cabinet"),
     ]
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="messages", verbose_name="Client")
+    dossier = models.ForeignKey(
+        "ClientServiceSuivi", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="messages", verbose_name="Dossier lié",
+    )
+    service = models.ForeignKey(
+        Service, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="messages", verbose_name="Service lié",
+    )
+    task = models.ForeignKey(
+        DossierTask, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="messages", verbose_name="Tâche liée",
+    )
     direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default="client", verbose_name="Émetteur")
     text = models.TextField(verbose_name="Message")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Envoyé le")
@@ -377,6 +389,27 @@ class ClientMessage(models.Model):
     @property
     def client_name(self):
         return self.client.name
+
+    @property
+    def dossier_service(self):
+        return f"{self.dossier.service_title} (N°{self.dossier.id})" if self.dossier else "—"
+
+    @property
+    def service_title(self):
+        return self.service.title if self.service else "—"
+
+    @property
+    def task_title(self):
+        return self.task.titre if self.task else "—"
+
+    @property
+    def context_label(self):
+        parts = []
+        if self.dossier:
+            parts.append(self.dossier_service)
+        if self.task:
+            parts.append(f"Tâche : {self.task_title}")
+        return " · ".join(parts) if parts else "Général"
 
 
 class AuthToken(models.Model):

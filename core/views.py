@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.db.models.deletion import ProtectedError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -592,21 +593,38 @@ def api_client_attachment_delete(request, attachment_id):
 
 
 @csrf_exempt
+def _message_payload(m):
+    return {
+        "id": m.id,
+        "direction": m.direction,
+        "text": m.text,
+        "created_at": m.created_at.strftime("%d/%m/%Y %H:%M"),
+        "dossier_id": m.dossier_id,
+        "dossier_service": m.dossier_service,
+        "service_id": m.service_id,
+        "service_title": m.service_title,
+        "task_id": m.task_id,
+        "task_title": m.task_title,
+        "context_label": m.context_label,
+    }
+
+
 def api_client_messages(request):
     client = _client_from_request(request)
     if not client:
         return _json({"ok": False, "error": "Non autorisé"}, 401)
     if request.method == "GET":
-        items = [
-            {
-                "id": m.id,
-                "direction": m.direction,
-                "text": m.text,
-                "created_at": m.created_at.strftime("%d/%m/%Y %H:%M"),
-            }
-            for m in ClientMessage.objects.filter(client=client)
-        ]
-        return _json({"ok": True, "messages": items})
+        queryset = ClientMessage.objects.filter(client=client)
+        dossier = request.GET.get("dossier", "").strip()
+        task = request.GET.get("task", "").strip()
+        service = request.GET.get("service", "").strip()
+        if dossier.isdigit():
+            queryset = queryset.filter(dossier_id=int(dossier))
+        if task.isdigit():
+            queryset = queryset.filter(task_id=int(task))
+        if service.isdigit():
+            queryset = queryset.filter(service_id=int(service))
+        return _json({"ok": True, "messages": [_message_payload(m) for m in queryset]})
     if request.method == "POST":
         text = (request.body or b"").decode("utf-8", "replace")
         try:
@@ -616,7 +634,29 @@ def api_client_messages(request):
         text = (payload.get("text") or "").strip()
         if not text:
             return _json({"ok": False, "error": "Message vide."}, 400)
-        ClientMessage.objects.create(client=client, direction="client", text=text)
+        dossier = None
+        service = None
+        task = None
+        if (payload.get("dossier") or "").strip().isdigit():
+            dossier = ClientServiceSuivi.objects.filter(pk=int(payload["dossier"]), client=client).first()
+            if not dossier:
+                return _json({"ok": False, "error": "Dossier introuvable pour ce compte."}, 400)
+        if (payload.get("service") or "").strip().isdigit():
+            service = Service.objects.filter(pk=int(payload["service"])).first()
+            if not service:
+                return _json({"ok": False, "error": "Service introuvable."}, 400)
+        if (payload.get("task") or "").strip().isdigit():
+            task = DossierTask.objects.filter(pk=int(payload["task"]), dossier__client=client).first()
+            if not task:
+                return _json({"ok": False, "error": "Tâche introuvable pour ce compte."}, 400)
+            if dossier and task.dossier_id != dossier.id:
+                return _json({"ok": False, "error": "La tâche n'appartient pas au dossier sélectionné."}, 400)
+        if not service and dossier:
+            service = dossier.type_service
+        ClientMessage.objects.create(
+            client=client, direction="client", text=text,
+            dossier=dossier, service=service, task=task,
+        )
         return _json({"ok": True, "message": "Message envoyé."})
     return _json({"ok": False, "error": "Méthode non autorisée"}, 405)
 
@@ -637,7 +677,7 @@ TABLES = {
     "service_followups": (ServiceFollowUp, ["id", "client_name", "service_title", "dossier_id", "dossier_label", "status", "start_date", "due_date", "notes", "created_at"], None),
     "types_service": (Service, ["id", "title", "slug", "short_desc", "parent_title"], None),
     "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "frequence", "commentaire", "service_note"], None),
-    "client_messages": (ClientMessage, ["id", "client_name", "direction", "text", "created_at"], None),
+    "client_messages": (ClientMessage, ["id", "client_name", "dossier_service", "service_title", "task_title", "direction", "text", "created_at"], None),
     "dossier_tasks": (DossierTask, ["id", "client_name", "dossier_service", "followup_title", "titre", "statut", "date_echeance", "repetition"], None),
     "prefactures": (Prefacture, ["id", "client_name", "dossier_service", "numero", "date", "montant_ht", "taux_tva", "montant_ttc", "statut"], None),
     "dossier_attachments": (DossierAttachment, ["id", "client_name", "dossier_service", "original_name", "category", "size", "uploaded_by", "created_at"], None),
@@ -672,6 +712,19 @@ def api_admin(request, table):
                 queryset = queryset.filter(statut=statut)
             if followup.isdigit():
                 queryset = queryset.filter(service_followup_id=int(followup))
+        if table == "client_messages":
+            client_id = request.GET.get("client", "").strip()
+            dossier = request.GET.get("dossier", "").strip()
+            service = request.GET.get("service", "").strip()
+            task = request.GET.get("task", "").strip()
+            if client_id.isdigit():
+                queryset = queryset.filter(client_id=int(client_id))
+            if dossier.isdigit():
+                queryset = queryset.filter(dossier_id=int(dossier))
+            if service.isdigit():
+                queryset = queryset.filter(service_id=int(service))
+            if task.isdigit():
+                queryset = queryset.filter(task_id=int(task))
         items = []
         for obj in queryset:
             item = {f: getattr(obj, f, "") for f in fields}
@@ -723,6 +776,23 @@ def api_admin(request, table):
                 return _json({"ok": False, "error": "Date invalide (AAAA-MM-JJ)"}, 400)
         elif field in ("commentaire", "notes", "numero_quittance_ou_tej", "notes_collaborateur", "service_note", "titre", "description", "periode"):
             value = str(value)
+        elif table == "types_service" and field in ("title", "short_desc", "slug", "price_hint", "icon"):
+            value = str(value)
+            if field == "slug":
+                slug = value.strip().lower().replace(" ", "-")
+                if Service.objects.exclude(pk=obj.pk).filter(slug=slug).exists():
+                    return _json({"ok": False, "error": "Un service existe déjà avec cet identifiant."}, 400)
+                value = slug
+        elif table == "types_service" and field == "parent":
+            raw = str(value).strip()
+            parent = None
+            if raw.isdigit():
+                parent = Service.objects.filter(pk=int(raw)).first()
+                if not parent:
+                    return _json({"ok": False, "error": "Service parent introuvable."}, 400)
+                if parent.pk == obj.pk:
+                    return _json({"ok": False, "error": "Un service ne peut pas être son propre parent."}, 400)
+            value = parent
         else:
             return _json({"ok": False, "error": "Champ non modifiable"}, 400)
         if not hasattr(obj, field):
@@ -730,6 +800,25 @@ def api_admin(request, table):
         setattr(obj, field, value)
         obj.save(update_fields=[field])
         return _json({"ok": True})
+
+    if request.method == "DELETE":
+        body = _read_body(request)
+        try:
+            obj = model.objects.get(pk=int(body.get("id", 0)))
+        except (ValueError, model.DoesNotExist):
+            return _json({"ok": False, "error": "Élément introuvable"}, 404)
+        if table == "types_service":
+            if obj.subservices.exists():
+                return _json({"ok": False, "error": "Supprimez d'abord les sous-services liés à ce service."}, 400)
+            try:
+                obj.delete()
+            except ProtectedError:
+                return _json({"ok": False, "error": "Ce service est utilisé par des dossiers clients : suppression impossible."}, 400)
+            return _json({"ok": True, "message": "Service supprimé."})
+        if table in ("client_messages", "client_service_suivis", "dossier_tasks", "service_followups", "prefactures", "dossier_attachments", "declarations", "payments", "devis_requests", "appointments", "messages"):
+            obj.delete()
+            return _json({"ok": True, "message": "Élément supprimé."})
+        return _json({"ok": False, "error": "Suppression non disponible pour cette table."}, 400)
 
     if request.method == "POST":
         return _api_admin_create(request, table)
@@ -846,6 +935,51 @@ def api_admin_detail(request, table, obj_id):
                 "statut_paiement": obj.dossier.get_statut_paiement_display(),
                 "montant": str(obj.dossier.montant),
             },
+        }
+        return _json({"ok": True, "item": item})
+    if table == "client_messages":
+        obj = ClientMessage.objects.filter(pk=obj_id).select_related("client", "dossier", "service", "task").first()
+        if not obj:
+            return _json({"ok": False, "error": "Message introuvable"}, 404)
+        thread = ClientMessage.objects.filter(client=obj.client)
+        if obj.dossier:
+            thread = thread.filter(dossier_id=obj.dossier_id)
+        item = {
+            "type": "message",
+            "id": obj.id,
+            "direction": obj.direction,
+            "text": obj.text,
+            "created_at": obj.created_at.strftime("%d/%m/%Y %H:%M"),
+            "client_id": obj.client.id,
+            "client_name": obj.client.display_name,
+            "dossier_id": obj.dossier_id,
+            "dossier_service": obj.dossier_service,
+            "service_title": obj.service_title,
+            "task_id": obj.task_id,
+            "task_title": obj.task_title,
+            "context_label": obj.context_label,
+            "thread": [_message_payload(m) for m in thread],
+        }
+        return _json({"ok": True, "item": item})
+    if table == "types_service":
+        obj = Service.objects.filter(pk=obj_id).select_related("parent").prefetch_related("subservices").first()
+        if not obj:
+            return _json({"ok": False, "error": "Service introuvable"}, 404)
+        item = {
+            "type": "service",
+            "id": obj.id,
+            "title": obj.title,
+            "slug": obj.slug,
+            "short_desc": obj.short_desc,
+            "description": obj.description,
+            "icon": obj.icon,
+            "price_hint": obj.price_hint,
+            "parent_id": obj.parent_id,
+            "parent_title": obj.parent_title,
+            "subservices": [
+                {"id": s.id, "title": s.title, "slug": s.slug, "short_desc": s.short_desc}
+                for s in obj.subservices.all()
+            ],
         }
         return _json({"ok": True, "item": item})
     return _json({"ok": False, "error": "Table non suivie"}, 400)
@@ -1097,7 +1231,29 @@ def _api_admin_create(request, table):
         text = (body.get("text") or "").strip()
         if not text:
             return _json({"ok": False, "error": "Message vide."}, 400)
-        obj = ClientMessage.objects.create(client=client, direction="admin", text=text)
+        dossier = None
+        service = None
+        task = None
+        if (body.get("dossier") or "").strip().isdigit():
+            dossier = ClientServiceSuivi.objects.filter(pk=int(body["dossier"]), client=client).first()
+            if not dossier:
+                return _json({"ok": False, "error": "Dossier introuvable pour ce client."}, 400)
+        if (body.get("service") or "").strip().isdigit():
+            service = Service.objects.filter(pk=int(body["service"])).first()
+            if not service:
+                return _json({"ok": False, "error": "Service introuvable."}, 400)
+        if (body.get("task") or "").strip().isdigit():
+            task = DossierTask.objects.filter(pk=int(body["task"]), dossier__client=client).first()
+            if not task:
+                return _json({"ok": False, "error": "Tâche introuvable pour ce client."}, 400)
+            if dossier and task.dossier_id != dossier.id:
+                return _json({"ok": False, "error": "La tâche n'appartient pas au dossier sélectionné."}, 400)
+        if not service and dossier:
+            service = dossier.type_service
+        obj = ClientMessage.objects.create(
+            client=client, direction="admin", text=text,
+            dossier=dossier, service=service, task=task,
+        )
         return _json({"ok": True, "id": obj.id})
 
     if table == "types_service":

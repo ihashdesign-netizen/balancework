@@ -264,6 +264,8 @@ textarea { min-height: 130px; resize: vertical; }
 .msg small { color: #64748b; }
 .msg-client { background: var(--primary-light); }
 .msg-admin { background: #eef2ff; }
+.msg-context { color: #7c3aed !important; font-style: italic; }
+.thread-box { max-height: 320px; overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
 
 /* ---------- Espace client : dossiers, pièces jointes, préfacture ---------- */
 .dossier-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; background: #fff; }

@@ -106,6 +106,9 @@ const BalanceAdmin = (() => {
     ],
     client_messages: [
       { name: "client", label: "Client *", type: "select", source: "/api/admin/clients", valueKey: "id", textKey: (c) => c.name },
+      { name: "dossier", label: "Dossier lié (optionnel)", type: "select", source: "/api/admin/client_service_suivis", valueKey: "id", textKey: (d) => d.client_name + " — " + d.service_title + " (N°" + d.id + ")" },
+      { name: "service", label: "Service lié (optionnel)", type: "select", source: "/api/admin/types_service", valueKey: "id", textKey: (s) => s.title },
+      { name: "task", label: "Tâche liée (optionnel)", type: "select", source: "/api/admin/dossier_tasks", valueKey: "id", textKey: (t) => t.client_name + " — " + t.titre + " (N°" + t.id + ")" },
       { name: "text", label: "Réponse au client *", type: "textarea" },
     ],
     dossier_tasks: [
@@ -269,6 +272,16 @@ const BalanceAdmin = (() => {
       { key: "montant_a_payer", label: "Montant (TND)" },
       { key: "notes_collaborateur", label: "Notes" },
     ],
+    client_messages: [
+      { key: "id", label: "N°" },
+      { key: "client_name", label: "Client" },
+      { key: "dossier_service", label: "Dossier" },
+      { key: "service_title", label: "Service" },
+      { key: "task_title", label: "Tâche" },
+      { key: "direction", label: "Sens" },
+      { key: "text", label: "Message" },
+      { key: "created_at", label: "Date" },
+    ],
     dossier_attachments: [
       { key: "id", label: "N°" },
       { key: "client_name", label: "Client" },
@@ -281,7 +294,7 @@ const BalanceAdmin = (() => {
     ],
   };
 
-  const DETAIL_TABLES = ["client_service_suivis", "service_followups", "dossier_tasks"];
+  const DETAIL_TABLES = ["client_service_suivis", "service_followups", "dossier_tasks", "types_service", "client_messages"];
 
   const EDIT_FIELDS = {
     client_service_suivis: {
@@ -305,6 +318,13 @@ const BalanceAdmin = (() => {
       date_echeance: { type: "date" },
       repetition: { type: "select", options: ["ponctuel", "mensuel", "trimestriel", "semestriel", "annuel"] },
     },
+    types_service: {
+      title: { type: "text" },
+      slug: { type: "text" },
+      short_desc: { type: "text" },
+      price_hint: { type: "text" },
+      icon: { type: "text" },
+    },
     declarations: {
       statut: { type: "select", options: ["a_faire", "en_cours", "depose", "retard"] },
       type_declaration: { type: "select", options: ["mensuelle", "acompte", "annuelle", "autre"] },
@@ -315,8 +335,15 @@ const BalanceAdmin = (() => {
     },
   };
 
+  const ROW_ACTIONS = {
+    types_service: (item) => `
+      <button class="btn btn-sm" onclick="BalanceAdmin.addSubService(${item.id}, '${escapeHtml(String(item.title)).replace(/'/g, "\\'")}')">＋ sous-service</button>
+      <button class="btn btn-sm btn-danger" onclick="BalanceAdmin.deleteService(${item.id}, '${escapeHtml(String(item.title)).replace(/'/g, "\\'")}')">Supprimer</button>`,
+  };
+
   let liveOn = false;
   let liveTimer = null;
+  let currentDetail = null;
 
   function stopLive() {
     liveOn = false;
@@ -452,10 +479,10 @@ const BalanceAdmin = (() => {
             return `<td>${value == null || value === "" ? "—" : escapeHtml(String(value))}</td>`;
           })
           .join("");
-        const btn = detail
-          ? `<td><button class="btn btn-sm" onclick="BalanceAdmin.showDetail('${tab}', ${item.id})">Détail</button></td>`
-          : `<td></td>`;
-        return `<tr>${cells}${btn}</tr>`;
+        const actions = [];
+        if (ROW_ACTIONS[tab]) actions.push(ROW_ACTIONS[tab](item));
+        if (detail) actions.push(`<button class="btn btn-sm" onclick="BalanceAdmin.showDetail('${tab}', ${item.id})">Détail</button>`);
+        return `<tr>${cells}${actions.length ? `<td>${actions.join(" ")}</td>` : "<td></td>"}</tr>`;
       })
       .join("");
     wrap.innerHTML = `<table class="admin-table"><thead><tr>${head}<th></th></tr></thead><tbody>${body}</tbody></table>`;
@@ -467,6 +494,7 @@ const BalanceAdmin = (() => {
   }
 
   async function showDetail(tab, id) {
+    currentDetail = { tab, id };
     try {
       const [data, listData] = await Promise.all([
         api(`/api/admin/detail/${tab}/${id}`),
@@ -543,8 +571,41 @@ const BalanceAdmin = (() => {
             <tr><td>Statut paiement</td><td>${statusBadge(it.dossier.statut_paiement)}</td></tr>
             <tr><td>Prix (TND)</td><td>${it.dossier.montant}</td></tr>
           </table>`;
+      } else if (it.type === "service") {
+        html = `
+          <h3>Service — ${escapeHtml(it.title)}</h3>
+          <p class="muted-sm">Identifiant : ${escapeHtml(it.slug)}${it.parent_id ? ` · Parent : ${escapeHtml(it.parent_title)}` : " · Service principal"}</p>
+          <table class="admin-table">
+            ${editRow(tab, "title", id, raw.title, "Titre")}
+            ${editRow(tab, "slug", id, raw.slug, "Identifiant (slug)")}
+            ${editRow(tab, "short_desc", id, raw.short_desc, "Résumé")}
+            ${editRow(tab, "price_hint", id, raw.price_hint, "Indication tarifaire")}
+            ${editRow(tab, "icon", id, raw.icon, "Icône")}
+            <tr><td>Service parent</td><td><select id="detail-parent" class="inline-edit" data-table="${tab}" data-field="parent" data-id="${id}" onchange="BalanceAdmin.saveField(this)"><option value="">Chargement…</option></select></td></tr>
+            <tr><td>Description</td><td>${escapeHtml(it.description || "—")}</td></tr>
+          </table>
+          <h4>Sous-services</h4>
+          ${it.subservices.length ? `<ul class="task-list">${it.subservices.map((s) => `<li>${escapeHtml(s.title)} — <small>${escapeHtml(s.slug)}</small></li>`).join("")}</ul>` : '<p class="muted-sm">Aucun sous-service. Utilisez « ＋ sous-service » dans la liste.</p>'}`;
+      } else if (it.type === "message") {
+        const msgs = (it.thread || []).map(
+          (m) => `<div class="msg ${m.direction === "admin" ? "msg-admin" : "msg-client"}">
+            <strong>${m.direction === "admin" ? "Cabinet" : it.client_name}</strong> — <small>${m.created_at}</small>
+            ${m.context_label && m.context_label !== "Général" ? `<br><small class="msg-context">↳ ${escapeHtml(m.context_label)}</small>` : ""}
+            <p>${escapeHtml(m.text)}</p>
+          </div>`,
+        ).join("");
+        html = `
+          <h3>Messagerie — ${escapeHtml(it.client_name)}</h3>
+          <p class="muted-sm">Contexte : ${escapeHtml(it.context_label)}</p>
+          <div class="thread-box">${msgs || '<p class="muted-sm">Aucun message.</p>'}</div>
+          <div class="form-group" style="margin-top:12px">
+            <label for="reply-text">Réponse du cabinet</label>
+            <textarea id="reply-text" rows="2" placeholder="Votre réponse…"></textarea>
+          </div>
+          <button class="btn" onclick="BalanceAdmin.replyMessage(${it.client_id}, ${it.dossier_id || "null"})">Envoyer la réponse</button>`;
       }
       wrap.innerHTML = html;
+      if (it.type === "service") populateParentSelect(id, it.parent_id);
     } catch (e) {
       alert(e.message);
     }
@@ -705,6 +766,65 @@ const BalanceAdmin = (() => {
     if (!shown) buildCreateForm();
   }
 
+  async function addSubService(parentId, parentLabel) {
+    if (currentTab !== "types_service") switchTab("types_service");
+    document.getElementById("create-btn").style.display = "none";
+    const box = document.getElementById("create-box");
+    box.style.display = "";
+    await buildCreateForm();
+    const parentSel = document.getElementById("cf-parent");
+    if (parentSel) parentSel.value = String(parentId);
+    const h = box.querySelector("h3");
+    if (h) h.textContent = `Ajouter un sous-service à « ${parentLabel} »`;
+    const titleEl = document.getElementById("cf-title");
+    if (titleEl) titleEl.focus();
+  }
+
+  async function deleteService(id, title) {
+    if (!confirm(`Supprimer le service « ${title} » ?`)) return;
+    try {
+      const data = await api(`/api/admin/types_service`, { method: "DELETE", body: JSON.stringify({ id }) });
+      alert(data.message || "Service supprimé.");
+      applyFilters();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  async function populateParentSelect(serviceId, currentParentId) {
+    const sel = document.getElementById("detail-parent");
+    if (!sel) return;
+    try {
+      const data = await api("/api/admin/types_service");
+      const opts = ['<option value="">— Aucun (service principal) —</option>'];
+      for (const s of data.items || []) {
+        if (Number(s.id) === Number(serviceId)) continue;
+        const label = s.parent_title !== "—" ? s.parent_title + " › " + s.title : s.title + " (service principal)";
+        opts.push(`<option value="${s.id}" ${Number(s.id) === Number(currentParentId) ? "selected" : ""}>${escapeHtml(label)}</option>`);
+      }
+      sel.innerHTML = opts.join("");
+    } catch (e) {}
+  }
+
+  async function replyMessage(clientId, dossierId) {
+    const textEl = document.getElementById("reply-text");
+    const text = (textEl.value || "").trim();
+    if (!text) {
+      alert("Écrivez une réponse.");
+      return;
+    }
+    const payload = { client: clientId, text };
+    if (dossierId) payload.dossier = String(dossierId);
+    try {
+      await api(`/api/admin/client_messages`, { method: "POST", body: JSON.stringify(payload) });
+      textEl.value = "";
+      alert("Réponse envoyée.");
+      if (currentDetail) showDetail(currentDetail.tab, currentDetail.id);
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     if (token()) {
       api("/api/admin/devis_requests")
@@ -713,5 +833,5 @@ const BalanceAdmin = (() => {
     }
   });
 
-  return { login, logout, switchTab, saveField, toggleCreate, showDetail, closeDetail, applyFilters, toggleLive };
+  return { login, logout, switchTab, saveField, toggleCreate, showDetail, closeDetail, applyFilters, toggleLive, addSubService, deleteService, replyMessage };
 })();

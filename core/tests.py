@@ -3,7 +3,16 @@ from datetime import date, timedelta
 
 from django.test import TestCase, override_settings
 
-from .models import Appointment, DevisRequest, Message
+from .models import (
+    Appointment,
+    Client,
+    ClientMessage,
+    ClientServiceSuivi,
+    DevisRequest,
+    DossierTask,
+    Message,
+    Service,
+)
 
 
 class ApiServicesTests(TestCase):
@@ -98,3 +107,113 @@ class SeoTests(TestCase):
         robots = self.client.get("/robots.txt")
         self.assertEqual(robots.status_code, 200)
         self.assertContains(robots, "sitemap.xml")
+
+
+@override_settings(ADMIN_TOKEN="secret-test")
+class ServiceCrudAdminTests(TestCase):
+    def setUp(self):
+        self.h = {"HTTP_AUTHORIZATION": "Bearer secret-test"}
+
+    def test_create_update_subservice_delete(self):
+        res = self.client.post(
+            "/api/admin/types_service",
+            data=json.dumps({"title": "Audit Comptable", "slug": "audit-comptable", "short_desc": "Audit", "description": "Audit complet", "price_hint": "Sur devis", "icon": "clipboard"}),
+            content_type="application/json",
+            **self.h,
+        )
+        self.assertEqual(res.status_code, 200)
+        parent_id = res.json()["id"]
+        parent = Service.objects.get(pk=parent_id)
+        self.assertIsNone(parent.parent)
+
+        res = self.client.post(
+            "/api/admin/types_service",
+            data=json.dumps({"title": "Audit Externe", "slug": "audit-externe", "short_desc": "AE", "parent": str(parent_id)}),
+            content_type="application/json",
+            **self.h,
+        )
+        self.assertEqual(res.status_code, 200)
+        sub = Service.objects.get(pk=res.json()["id"])
+        self.assertEqual(sub.parent_id, parent_id)
+
+        res = self.client.put(
+            "/api/admin/types_service",
+            data=json.dumps({"id": sub.id, "field": "title", "status": "Audit Externe Complet"}),
+            content_type="application/json",
+            **self.h,
+        )
+        self.assertEqual(res.status_code, 200)
+        sub.refresh_from_db()
+        self.assertEqual(sub.title, "Audit Externe Complet")
+
+        res = self.client.delete("/api/admin/types_service", data=json.dumps({"id": parent_id}), content_type="application/json", **self.h)
+        self.assertEqual(res.status_code, 400)
+
+        res = self.client.delete("/api/admin/types_service", data=json.dumps({"id": sub.id}), content_type="application/json", **self.h)
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(Service.objects.filter(pk=sub.id).exists())
+
+        res = self.client.delete("/api/admin/types_service", data=json.dumps({"id": parent_id}), content_type="application/json", **self.h)
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(Service.objects.filter(pk=parent_id).exists())
+
+    def test_cannot_delete_service_used_by_dossier(self):
+        client = Client.objects.create(name="C", email="c@test.tn", phone="1")
+        svc = Service.objects.create(title="S", slug="s", short_desc="d", description="x")
+        ClientServiceSuivi.objects.create(client=client, type_service=svc)
+        res = self.client.delete("/api/admin/types_service", data=json.dumps({"id": svc.id}), content_type="application/json", **self.h)
+        self.assertEqual(res.status_code, 400)
+        self.assertTrue(Service.objects.filter(pk=svc.id).exists())
+
+
+class ClientMessageContextTests(TestCase):
+    def setUp(self):
+        res = self.client.post(
+            "/api/auth/register",
+            data=json.dumps({"name": "Doe", "prenom": "Jane", "email": "j@test.tn", "phone": "123", "matricule_fiscale": "1574T", "password": "password123"}),
+            content_type="application/json",
+        )
+        self.token = res.json()["token"]
+        self.client_model = Client.objects.get(email="j@test.tn")
+        self.svc = Service.objects.create(title="Fiscalité", slug="fiscal", short_desc="f", description="x")
+        self.dossier = ClientServiceSuivi.objects.create(client=self.client_model, type_service=self.svc, montant=100)
+        self.h = {"HTTP_AUTHORIZATION": f"Bearer {self.token}"}
+
+    def test_send_message_linked_to_dossier_and_task(self):
+        task = DossierTask.objects.create(dossier=self.dossier, titre="Déposer la TVA")
+        res = self.client.post(
+            "/api/client/messages",
+            data=json.dumps({"text": "Où en est la déclaration ?", "dossier": str(self.dossier.id), "task": str(task.id)}),
+            content_type="application/json",
+            **self.h,
+        )
+        self.assertEqual(res.status_code, 200)
+        msg = ClientMessage.objects.get()
+        self.assertEqual(msg.dossier_id, self.dossier.id)
+        self.assertEqual(msg.task_id, task.id)
+        self.assertEqual(msg.service_id, self.svc.id)
+        self.assertEqual(msg.context_label, f"Fiscalité (N°{self.dossier.id}) · Tâche : Déposer la TVA")
+
+    def test_filter_messages_by_dossier(self):
+        DossierTask.objects.create(dossier=self.dossier, titre="Déposer la TVA")
+        self.client.post(
+            "/api/client/messages",
+            data=json.dumps({"text": "Suivi dossier", "dossier": str(self.dossier.id)}),
+            content_type="application/json",
+            **self.h,
+        )
+        res = self.client.get(f"/api/client/messages?dossier={self.dossier.id}", **self.h)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()["messages"]), 1)
+        self.assertEqual(res.json()["messages"][0]["dossier_service"], f"Fiscalité (N°{self.dossier.id})")
+
+    def test_reject_task_of_another_dossier(self):
+        other = ClientServiceSuivi.objects.create(client=self.client_model, type_service=self.svc)
+        task2 = DossierTask.objects.create(dossier=other, titre="Autre tâche")
+        res = self.client.post(
+            "/api/client/messages",
+            data=json.dumps({"text": "x", "dossier": str(self.dossier.id), "task": str(task2.id)}),
+            content_type="application/json",
+            **self.h,
+        )
+        self.assertEqual(res.status_code, 400)

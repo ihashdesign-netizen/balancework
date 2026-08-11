@@ -165,7 +165,10 @@ const BalanceClient = (() => {
     }
   }
 
+  let lastSuivis = [];
+
   function renderSuivis(suivis) {
+    lastSuivis = suivis || [];
     const wrap = document.getElementById("dashboard-content");
     if (!suivis.length) {
       wrap.innerHTML = '<p style="color:#64748b">Aucun dossier en cours pour le moment. Ouvrez un dossier ci-dessus.</p>';
@@ -408,6 +411,8 @@ const BalanceClient = (() => {
         const data = await api("/api/client/dashboard");
         renderDeclarations(data.declarations || []);
         renderSuivis(data.suivis || []);
+        populateMessageContext();
+        loadMessages();
       } catch (e) {}
     }, 20000);
   }
@@ -419,16 +424,56 @@ const BalanceClient = (() => {
     }
   }
 
+  function populateMessageContext() {
+    const sel = document.getElementById("msg-dossier");
+    if (!sel) return;
+    sel.innerHTML =
+      '<option value="">Tous les dossiers</option>' +
+      (lastSuivis || []).map((s) => `<option value="${s.id}">${escapeHtml(s.service)} (N°${s.id})</option>`).join("");
+    updateTaskOptions();
+  }
+
+  function updateTaskOptions() {
+    const taskSel = document.getElementById("msg-task");
+    const dossierEl = document.getElementById("msg-dossier");
+    if (!taskSel || !dossierEl) return;
+    const dossierId = dossierEl.value;
+    let tasks = [];
+    if (dossierId) {
+      const s = (lastSuivis || []).find((x) => String(x.id) === String(dossierId));
+      tasks = (s && s.tasks) || [];
+    }
+    taskSel.innerHTML =
+      `<option value="">${dossierId ? "— Toutes les tâches du dossier —" : "— Aucune tâche précise —"}</option>` +
+      tasks.map((t) => `<option value="${t.id}">${escapeHtml(t.titre)}</option>`).join("");
+  }
+
+  function onContextChange() {
+    updateTaskOptions();
+    loadMessages();
+  }
+
   async function loadMessages() {
     const wrap = document.getElementById("messages-thread");
+    const dossierEl = document.getElementById("msg-dossier");
+    const taskEl = document.getElementById("msg-task");
+    const dossierId = dossierEl ? dossierEl.value : "";
+    const taskId = taskEl ? taskEl.value : "";
+    const qs = [];
+    if (dossierId) qs.push("dossier=" + encodeURIComponent(dossierId));
+    if (taskId) qs.push("task=" + encodeURIComponent(taskId));
     try {
-      const data = await api("/api/client/messages");
+      const data = await api("/api/client/messages" + (qs.length ? "?" + qs.join("&") : ""));
       if (!(data.messages || []).length) {
         wrap.innerHTML = '<p style="color:#64748b">Aucun message pour le moment.</p>';
         return;
       }
       wrap.innerHTML = data.messages
-        .map((m) => `<div class="msg ${m.direction === "admin" ? "msg-admin" : "msg-client"}"><strong>${m.direction === "admin" ? "Cabinet" : "Vous"}</strong> — <small>${m.created_at}</small><p>${escapeHtml(m.text)}</p></div>`)
+        .map((m) => `<div class="msg ${m.direction === "admin" ? "msg-admin" : "msg-client"}">
+          <strong>${m.direction === "admin" ? "Cabinet" : "Vous"}</strong> — <small>${m.created_at}</small>
+          ${m.context_label && m.context_label !== "Général" ? `<br><small class="msg-context">↳ ${escapeHtml(m.context_label)}</small>` : ""}
+          <p>${escapeHtml(m.text)}</p>
+        </div>`)
         .join("");
       wrap.scrollTop = wrap.scrollHeight;
     } catch (e) {
@@ -444,8 +489,13 @@ const BalanceClient = (() => {
     }
     const btn = event.target;
     btn.disabled = true;
+    const payload = { text };
+    const dossierEl = document.getElementById("msg-dossier");
+    const taskEl = document.getElementById("msg-task");
+    if (dossierEl && dossierEl.value) payload.dossier = dossierEl.value;
+    if (taskEl && taskEl.value) payload.task = taskEl.value;
     try {
-      await api("/api/client/messages", { method: "POST", body: JSON.stringify({ text }) });
+      await api("/api/client/messages", { method: "POST", body: JSON.stringify(payload) });
       document.getElementById("msg-text").value = "";
       await loadMessages();
     } catch (err) {
@@ -508,11 +558,12 @@ const BalanceClient = (() => {
     populateProfile(client);
     renderServices();
     startAutoRefresh();
-    loadMessages();
     api("/api/client/dashboard")
       .then((data) => {
         renderDeclarations(data.declarations || []);
         renderSuivis(data.suivis || []);
+        populateMessageContext();
+        loadMessages();
       })
       .catch((err) => {
         document.getElementById("dashboard-content").innerHTML =
@@ -530,5 +581,5 @@ const BalanceClient = (() => {
     }
   });
 
-  return { login, register, logout, openDossier, sendMessage, resetDossier, uploadAttachment, deleteAttachment, showPrefacture, closePrefacture, printPrefacture, saveProfile, toggleDossierEdit, saveDossierEdit };
+  return { login, register, logout, openDossier, sendMessage, resetDossier, onContextChange, uploadAttachment, deleteAttachment, showPrefacture, closePrefacture, printPrefacture, saveProfile, toggleDossierEdit, saveDossierEdit };
 })();
