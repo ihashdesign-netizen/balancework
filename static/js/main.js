@@ -210,6 +210,12 @@ async function initServiceSelects() {
       opt.value = s.slug;
       opt.textContent = s.title;
       sel.appendChild(opt);
+      (s.subservices || []).forEach((ss) => {
+        const sub = document.createElement("option");
+        sub.value = ss.slug;
+        sub.textContent = s.title + " › " + ss.title;
+        sel.appendChild(sub);
+      });
     });
   });
 }
@@ -228,6 +234,7 @@ async function loadServices(targetId) {
         <h3>${s.title}</h3>
         <p>${s.short_desc}</p>
         <p style="font-size:14px">${s.description}</p>
+        ${(s.subservices || []).length ? `<ul class="sub-service-list">${s.subservices.map((ss) => `<li><a href="/devis/?service=${ss.slug}">${ss.title}</a> <small>${ss.short_desc}</small></li>`).join("")}</ul>` : ""}
         <a class="btn" href="/devis/?service=${s.slug}">Demander un devis</a>
       </div>`,
     )

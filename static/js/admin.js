@@ -133,6 +133,19 @@ const BalanceAdmin = (() => {
       { name: "numero_quittance_ou_tej", label: "N° quittance / accusé de dépôt", type: "text" },
       { name: "notes_collaborateur", label: "Remarques internes ou conseils", type: "textarea" },
     ],
+    types_service: {
+      id: "types_service",
+      label: "Ajouter un service",
+      fields: [
+        { name: "parent", label: "Service parent (sous-service)", type: "select", source: "/api/admin/types_service", valueKey: "id", textKey: (s) => (s.parent_title !== "—" ? s.parent_title + " › " + s.title : s.title + " (service principal)") },
+        { name: "title", label: "Titre *", type: "text" },
+        { name: "slug", label: "Identifiant (slug) *", type: "text" },
+        { name: "short_desc", label: "Résumé *", type: "text" },
+        { name: "description", label: "Description", type: "textarea" },
+        { name: "price_hint", label: "Indication tarifaire", type: "text" },
+        { name: "icon", label: "Icône", type: "text" },
+      ],
+    },
     service_followups: [
       { name: "client", label: "Client *", type: "select", source: "/api/admin/clients", valueKey: "id", textKey: (c) => c.name },
       { name: "dossier", label: "Dossier associé *", type: "select", source: "/api/admin/client_service_suivis", valueKey: "id", textKey: (d) => d.client_name + " — " + d.service_title + " (N°" + d.id + ")" },
@@ -207,6 +220,7 @@ const BalanceAdmin = (() => {
     ],
     types_service: [
       { key: "id", label: "N°" },
+      { key: "parent_title", label: "Service parent" },
       { key: "title", label: "Service" },
       { key: "slug", label: "Identifiant" },
       { key: "short_desc", label: "Résumé" },
@@ -519,7 +533,8 @@ const BalanceAdmin = (() => {
   }
 
   async function buildCreateForm() {
-    const cfg = CREATE_FORMS[currentTab];
+    const cfgRaw = CREATE_FORMS[currentTab];
+    const cfg = Array.isArray(cfgRaw) ? cfgRaw : cfgRaw.fields;
     const box = document.getElementById("create-box");
     const fields = cfg
       .map((f) => `<div class="form-group"><label for="cf-${f.name}">${f.label}</label>${fieldHtml(f)}</div>`)
@@ -554,7 +569,8 @@ const BalanceAdmin = (() => {
 
   async function submitCreate(e) {
     e.preventDefault();
-    const cfg = CREATE_FORMS[currentTab];
+    const cfgRaw = CREATE_FORMS[currentTab];
+    const cfg = Array.isArray(cfgRaw) ? cfgRaw : cfgRaw.fields;
     const hasFile = cfg.some((f) => f.type === "file");
     const fd = new FormData();
     const payload = {};

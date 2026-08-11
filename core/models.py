@@ -3,7 +3,7 @@ from django.db import models
 
 
 class Service(models.Model):
-    """Prestation proposée par le cabinet."""
+    """Prestation proposée par le cabinet (services et sous-services)."""
 
     slug = models.SlugField(unique=True, verbose_name="Identifiant")
     title = models.CharField(max_length=120, verbose_name="Titre")
@@ -11,6 +11,9 @@ class Service(models.Model):
     description = models.TextField(verbose_name="Description")
     icon = models.CharField(max_length=30, default="briefcase", verbose_name="Icône")
     price_hint = models.CharField(max_length=80, blank=True, verbose_name="Indication tarifaire")
+    parent = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="subservices", verbose_name="Service parent (sous-service)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -19,7 +22,11 @@ class Service(models.Model):
         verbose_name_plural = "Services"
 
     def __str__(self):
-        return self.title
+        return f"{self.parent.title} › {self.title}" if self.parent else self.title
+
+    @property
+    def parent_title(self):
+        return self.parent.title if self.parent else "—"
 
 
 class DevisRequest(models.Model):

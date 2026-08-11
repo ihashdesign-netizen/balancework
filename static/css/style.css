@@ -277,6 +277,16 @@ textarea { min-height: 130px; resize: vertical; }
 .dossier-edit { margin-top: 8px; padding: 10px; border: 1px dashed var(--line); border-radius: 10px; background: #f8fafc; display: grid; gap: 8px; }
 .dossier-edit label { font-size: 12px; font-weight: 600; color: var(--muted); }
 .dossier-edit textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 13px; box-sizing: border-box; }
+.svc-group { border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 10px; background: #fff; }
+.svc-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px; }
+.svc-row strong { font-size: 14px; }
+.svc-row p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+.svc-sub { margin-left: 14px; border-left: 2px solid var(--primary-light); border-radius: 0; padding-left: 12px; }
+.svc-sub strong { font-size: 13px; }
+.sub-service-list { list-style: none; padding: 0; margin: 8px 0 12px; }
+.sub-service-list li { padding: 5px 0; font-size: 13px; border-bottom: 1px dashed var(--line); }
+.sub-service-list a { font-weight: 600; color: var(--primary); text-decoration: none; }
+.sub-service-list small { display: block; color: var(--muted); }
 .muted-sm { color: var(--muted); font-size: 12px; margin: 4px 0; }
 .task-list { list-style: none; padding: 0; margin: 6px 0 0; }
 .task-list li { padding: 5px 0; font-size: 13px; border-bottom: 1px solid #f1f5f9; }

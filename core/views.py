@@ -119,9 +119,15 @@ def _service_title(service):
 
 @require_GET
 def api_services(request):
-    services = list(Service.objects.values(
-        "id", "slug", "title", "short_desc", "description", "icon"
+    services = list(Service.objects.filter(parent__isnull=True).values(
+        "id", "slug", "title", "short_desc", "description", "icon", "price_hint"
     ))
+    for s in services:
+        s["subservices"] = list(
+            Service.objects.filter(parent_id=s["id"]).values(
+                "id", "slug", "title", "short_desc", "icon"
+            )
+        )
     return _json({"ok": True, "services": services})
 
 
@@ -629,7 +635,7 @@ TABLES = {
     "clients": (Client, ["id", "name", "email", "phone", "company", "notes", "created_at"], None),
     "payments": (Payment, ["id", "client_name", "amount", "date", "status", "method", "notes", "created_at"], None),
     "service_followups": (ServiceFollowUp, ["id", "client_name", "service_title", "dossier_id", "dossier_label", "status", "start_date", "due_date", "notes", "created_at"], None),
-    "types_service": (Service, ["id", "title", "slug", "short_desc"], None),
+    "types_service": (Service, ["id", "title", "slug", "short_desc", "parent_title"], None),
     "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "frequence", "commentaire", "service_note"], None),
     "client_messages": (ClientMessage, ["id", "client_name", "direction", "text", "created_at"], None),
     "dossier_tasks": (DossierTask, ["id", "client_name", "dossier_service", "titre", "statut", "date_echeance", "repetition"], None),
@@ -1064,6 +1070,27 @@ def _api_admin_create(request, table):
         if not text:
             return _json({"ok": False, "error": "Message vide."}, 400)
         obj = ClientMessage.objects.create(client=client, direction="admin", text=text)
+        return _json({"ok": True, "id": obj.id})
+
+    if table == "types_service":
+        slug = (body.get("slug") or "").strip().lower().replace(" ", "-")
+        title = (body.get("title") or "").strip()
+        if not slug or not title:
+            return _json({"ok": False, "error": "Titre et identifiant requis."}, 400)
+        if Service.objects.filter(slug=slug).exists():
+            return _json({"ok": False, "error": "Un service existe déjà avec cet identifiant."}, 400)
+        parent = None
+        if (body.get("parent") or "").strip().isdigit():
+            parent = Service.objects.filter(pk=int(body["parent"])).first()
+        obj = Service.objects.create(
+            slug=slug,
+            title=title,
+            short_desc=(body.get("short_desc") or "")[:255],
+            description=(body.get("description") or ""),
+            icon=(body.get("icon") or "briefcase"),
+            price_hint=(body.get("price_hint") or ""),
+            parent=parent,
+        )
         return _json({"ok": True, "id": obj.id})
 
     return _json({"ok": False, "error": "Création non disponible pour cette table."}, 400)

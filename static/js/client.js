@@ -345,15 +345,29 @@ const BalanceClient = (() => {
         return;
       }
       wrap.innerHTML = data.services
-        .map(
-          (s) => `<div class="svc-row">
-            <div>
-              <strong>${s.title}</strong>
-              <p>${s.short_desc}</p>
+        .map((s) => {
+          const subs = (s.subservices || [])
+            .map(
+              (ss) => `<div class="svc-row svc-sub">
+              <div>
+                <strong>${escapeHtml(ss.title)}</strong>
+                <p>${escapeHtml(ss.short_desc)}</p>
+              </div>
+              <button class="btn btn-sm" onclick="BalanceClient.selectService(${ss.id}, '${escapeHtml(ss.title).replace(/'/g, "\\'")}')">Ouvrir dossier</button>
+            </div>`,
+            )
+            .join("");
+          return `<div class="svc-group">
+            <div class="svc-row">
+              <div>
+                <strong>${escapeHtml(s.title)}</strong>
+                <p>${escapeHtml(s.short_desc)}</p>
+              </div>
+              <button class="btn" onclick="BalanceClient.selectService(${s.id}, '${escapeHtml(s.title).replace(/'/g, "\\'")}')">Ouvrir dossier</button>
             </div>
-            <button class="btn" onclick="BalanceClient.selectService(${s.id}, '${escapeHtml(s.title).replace(/'/g, "\\'")}')">Ouvrir dossier</button>
-          </div>`,
-        )
+            ${subs}
+          </div>`;
+        })
         .join("");
     } catch (e) {
       wrap.innerHTML = `<p style="color:#b91c1c">${e.message}</p>`;
