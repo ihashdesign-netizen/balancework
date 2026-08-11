@@ -70,6 +70,7 @@ const BalanceAdmin = (() => {
 
   function switchTab(tab) {
     currentTab = tab;
+    stopLive();
     document.querySelectorAll(".admin-tabs button").forEach((b) => {
       b.classList.toggle("active", b.dataset.tab === tab);
     });
@@ -109,6 +110,7 @@ const BalanceAdmin = (() => {
     ],
     dossier_tasks: [
       { name: "dossier", label: "Dossier *", type: "select", source: "/api/admin/client_service_suivis", valueKey: "id", textKey: (d) => d.client_name + " — " + d.service_title },
+      { name: "service_followup", label: "Suivi de service lié (optionnel)", type: "select", source: "/api/admin/service_followups", valueKey: "id", textKey: (s) => s.client_name + " — " + s.service_title + " (N°" + s.id + ")" },
       { name: "titre", label: "Titre de la tâche *", type: "text" },
       { name: "description", label: "Description", type: "textarea" },
       { name: "statut", label: "Statut", type: "select", options: ["a_faire", "en_cours", "termine"] },
@@ -241,6 +243,7 @@ const BalanceAdmin = (() => {
       { key: "id", label: "N°" },
       { key: "client_name", label: "Client" },
       { key: "dossier_service", label: "Dossier" },
+      { key: "followup_title", label: "Suivi service" },
       { key: "titre", label: "Tâche" },
       { key: "statut", label: "Statut" },
       { key: "date_echeance", label: "Échéance" },
@@ -312,29 +315,107 @@ const BalanceAdmin = (() => {
     },
   };
 
-  async function loadTab(tab) {
-    const wrap = document.getElementById("tab-content");
-    const detail = DETAIL_TABLES.includes(tab);
-    const searchHtml = detail
-      ? `<div class="tab-toolbar"><input id="id-search" placeholder="Filtrer par N° (ID)…" oninput="BalanceAdmin.searchById()" /><small>Recherche par identifiant du dossier / service / tâche</small></div>`
-      : "";
-    wrap.innerHTML = `<div id="tab-toolbar">${searchHtml}</div><div id="tab-table"><p>Chargement…</p></div>`;
-    try {
-      const data = await api(`/api/admin/${tab}`);
-      renderTable(tab, data.items || []);
-    } catch (e) {
-      document.getElementById("tab-table").innerHTML = `<div class="alert show alert-error">${e.message}</div>`;
+  let liveOn = false;
+  let liveTimer = null;
+
+  function stopLive() {
+    liveOn = false;
+    if (liveTimer) {
+      clearInterval(liveTimer);
+      liveTimer = null;
     }
   }
 
-  async function searchById() {
-    const val = document.getElementById("id-search").value.trim();
+  function setLive(on) {
+    liveOn = on;
+    const btn = document.getElementById("live-btn");
+    if (btn) {
+      btn.textContent = on ? "Temps réel : ON" : "Temps réel : OFF";
+      btn.classList.toggle("btn-outline", !on);
+    }
+    if (on) {
+      if (!liveTimer) liveTimer = setInterval(refreshLive, 15000);
+    } else if (liveTimer) {
+      clearInterval(liveTimer);
+      liveTimer = null;
+    }
+  }
+
+  async function refreshLive() {
+    const ae = document.activeElement;
+    if (ae && ["INPUT", "SELECT", "TEXTAREA"].includes(ae.tagName)) return;
+    if (document.getElementById("admin-detail-overlay").style.display === "flex") return;
     try {
-      const data = await api(`/api/admin/${currentTab}${val ? "?q=" + encodeURIComponent(val) : ""}`);
-      renderTable(currentTab, data.items || []);
+      await applyFilters();
+    } catch (e) {}
+  }
+
+  async function loadTab(tab) {
+    const wrap = document.getElementById("tab-content");
+    const detail = DETAIL_TABLES.includes(tab);
+    const liveBtn = `<button id="live-btn" class="btn btn-sm" onclick="BalanceAdmin.toggleLive()">Temps réel : OFF</button>`;
+    let toolbar = "";
+    if (tab === "dossier_tasks") {
+      toolbar = `<div class="tab-toolbar">
+        <select id="tm-client" onchange="BalanceAdmin.applyFilters()"><option value="">Tous les clients</option></select>
+        <select id="tm-statut" onchange="BalanceAdmin.applyFilters()"><option value="">Tous les statuts</option></select>
+        <select id="tm-followup" onchange="BalanceAdmin.applyFilters()"><option value="">Tous les suivis de service</option></select>
+        ${liveBtn}
+      </div>`;
+    } else if (detail) {
+      toolbar = `<div class="tab-toolbar"><input id="id-search" placeholder="Filtrer par N° (ID)…" oninput="BalanceAdmin.applyFilters()" /><small>Recherche par identifiant du dossier / service / tâche</small>${liveBtn}</div>`;
+    } else {
+      toolbar = `<div class="tab-toolbar">${liveBtn}</div>`;
+    }
+    wrap.innerHTML = `<div id="tab-toolbar">${toolbar}</div><div id="tab-table"><p>Chargement…</p></div>`;
+    try {
+      if (tab === "dossier_tasks") await populateTaskFilters();
+      const data = await api(`/api/admin/${tab}`);
+      renderTable(tab, data.items || []);
+      setLive(true);
     } catch (e) {
       document.getElementById("tab-table").innerHTML = `<div class="alert show alert-error">${e.message}</div>`;
+      setLive(false);
     }
+  }
+
+  async function populateTaskFilters() {
+    const cSel = document.getElementById("tm-client");
+    const fSel = document.getElementById("tm-followup");
+    const stSel = document.getElementById("tm-statut");
+    stSel.innerHTML = `<option value="">Tous les statuts</option>${["a_faire", "en_cours", "termine"].map((s) => `<option value="${s}">${s.replace("_", " ")}</option>`).join("")}`;
+    try {
+      const clients = await api("/api/admin/clients");
+      cSel.innerHTML = `<option value="">Tous les clients</option>${(clients.items || []).map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("")}`;
+    } catch (e) {}
+    try {
+      const fups = await api("/api/admin/service_followups");
+      fSel.innerHTML = `<option value="">Tous les suivis de service</option>${(fups.items || []).map((s) => `<option value="${s.id}">${escapeHtml(s.client_name + " — " + s.service_title + " (N°" + s.id + ")")}</option>`).join("")}`;
+    } catch (e) {}
+  }
+
+  async function applyFilters() {
+    const wrap = document.getElementById("tab-table");
+    if (!wrap) return;
+    try {
+      const qs = [];
+      const c = document.getElementById("tm-client");
+      const st = document.getElementById("tm-statut");
+      const f = document.getElementById("tm-followup");
+      const id = document.getElementById("id-search");
+      if (c && c.value) qs.push("client=" + encodeURIComponent(c.value));
+      if (st && st.value) qs.push("statut=" + encodeURIComponent(st.value));
+      if (f && f.value) qs.push("followup=" + encodeURIComponent(f.value));
+      if (id && id.value.trim()) qs.push("q=" + encodeURIComponent(id.value.trim()));
+      const data = await api(`/api/admin/${currentTab}${qs.length ? "?" + qs.join("&") : ""}`);
+      renderTable(currentTab, data.items || []);
+    } catch (e) {
+      wrap.innerHTML = `<div class="alert show alert-error">${e.message}</div>`;
+    }
+  }
+
+  function toggleLive() {
+    setLive(!liveOn);
   }
 
   function renderTable(tab, items) {
@@ -356,7 +437,7 @@ const BalanceAdmin = (() => {
                 ? STATUS_OPTIONS[tab]
                 : (STATUS_OPTIONS[tab] || {})[c.key] || [];
               if (!opts.length) return `<td>${value == null || value === "" ? "—" : escapeHtml(String(value))}</td>`;
-              return `<td><select class="status-select" data-table="${tab}" data-field="${c.key}" data-id="${item.id}" onchange="BalanceAdmin.updateStatus(this)">
+              return `<td><select class="status-select" data-table="${tab}" data-field="${c.key}" data-id="${item.id}" onchange="BalanceAdmin.saveField(this)">
                 ${opts.map((s) => `<option value="${s}" ${value === s ? "selected" : ""}>${s.replace("_", " ")}</option>`).join("")}
               </select></td>`;
             }
@@ -448,6 +529,12 @@ const BalanceAdmin = (() => {
             ${editRow(tab, "repetition", id, raw.repetition, "Répétition")}
             <tr><td>Description</td><td>${escapeHtml(it.description || "—")}</td></tr>
           </table>
+          ${it.followup ? `
+          <h4>Suivi de service lié</h4>
+          <table class="admin-table">
+            <tr><td>Suivi</td><td>${escapeHtml(it.followup.service)} (N°${it.followup.id})</td></tr>
+            <tr><td>Statut</td><td>${statusBadge(it.followup.status)}</td></tr>
+          </table>` : ""}
           <h4>Dossier (tâche incluse dans le dossier)</h4>
           <table class="admin-table">
             <tr><td>Dossier</td><td>N°${it.dossier.id} — ${escapeHtml(it.dossier.service)}</td></tr>
@@ -626,5 +713,5 @@ const BalanceAdmin = (() => {
     }
   });
 
-  return { login, logout, switchTab, saveField, toggleCreate, showDetail, closeDetail, searchById };
+  return { login, logout, switchTab, saveField, toggleCreate, showDetail, closeDetail, applyFilters, toggleLive };
 })();

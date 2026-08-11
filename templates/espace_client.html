@@ -81,23 +81,23 @@
 
       <div class="grid-2" style="margin-bottom:24px">
         <div class="card">
-          <h3>Ouvrir un nouveau dossier</h3>
-          <p style="color:#64748b;font-size:14px;margin:0 0 14px">Choisissez un service : le cabinet traitera votre demande et vous répondra dans son espace.</p>
-          <div id="services-list" style="max-height:300px;overflow:auto"><p style="color:#64748b">Chargement…</p></div>
-          <div id="dossier-form" style="display:none;margin-top:14px">
-            <p id="dos-service-label" style="font-weight:700;margin:0 0 8px"></p>
-            <div class="form-group">
-              <label for="dos-description">Note du dossier (description du besoin) *</label>
-              <textarea id="dos-description" rows="3" placeholder="Décrivez votre situation, période concernée, éléments fournis…"></textarea>
-            </div>
-            <div class="form-group">
-              <label for="dos-service-note">Note du service</label>
-              <textarea id="dos-service-note" rows="2" placeholder="Précisions pour le service choisi (optionnel)…"></textarea>
-            </div>
-            <div style="display:flex;gap:8px">
-              <button class="btn" onclick="BalanceClient.openDossier()">Ouvrir le dossier</button>
-              <button class="btn btn-outline" onclick="BalanceClient.cancelDossier()">Annuler</button>
-            </div>
+          <h3>Ouvrir un dossier</h3>
+          <p style="color:#64748b;font-size:14px;margin:0 0 14px">Choisissez le service (ou sous-service) puis décrivez votre besoin en quelques mots : le dossier est ouvert immédiatement.</p>
+          <div class="form-group">
+            <label for="dos-service">Service / sous-service *</label>
+            <select id="dos-service" required><option value="">— Choisir un service —</option></select>
+          </div>
+          <div class="form-group">
+            <label for="dos-description">Note du dossier (description du besoin) *</label>
+            <textarea id="dos-description" rows="2" placeholder="Situation, période concernée, éléments fournis…"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="dos-service-note">Note du service</label>
+            <textarea id="dos-service-note" rows="1" placeholder="Précisions pour le service choisi (optionnel)…"></textarea>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" onclick="BalanceClient.openDossier()">Ouvrir le dossier</button>
+            <button class="btn btn-outline" onclick="BalanceClient.resetDossier()">Réinitialiser</button>
           </div>
         </div>
 

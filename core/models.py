@@ -224,6 +224,10 @@ class DossierTask(models.Model):
         ("annuel", "Annuel"),
     ]
     dossier = models.ForeignKey(ClientServiceSuivi, on_delete=models.CASCADE, related_name="tasks", verbose_name="Dossier")
+    service_followup = models.ForeignKey(
+        "ServiceFollowUp", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="tasks", verbose_name="Suivi de service lié",
+    )
     titre = models.CharField(max_length=200, verbose_name="Titre")
     description = models.TextField(blank=True, verbose_name="Description")
     statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default="a_faire", verbose_name="Statut")
@@ -246,6 +250,14 @@ class DossierTask(models.Model):
     @property
     def dossier_service(self):
         return self.dossier.service_title
+
+    @property
+    def followup_title(self):
+        return f"{self.service_followup.service_title} (N°{self.service_followup.id})" if self.service_followup else "—"
+
+    @property
+    def followup_id(self):
+        return self.service_followup.id if self.service_followup else None
 
 
 class Prefacture(models.Model):

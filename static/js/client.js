@@ -93,6 +93,7 @@ const BalanceClient = (() => {
   }
 
   function logout() {
+    stopAutoRefresh();
     api("/api/auth/logout", { method: "POST" }).catch(() => {});
     localStorage.removeItem(TOKEN_KEY);
     document.getElementById("dashboard-box").style.display = "none";
@@ -334,63 +335,40 @@ const BalanceClient = (() => {
     w.print();
   }
 
-  let selectedService = null;
-
   async function renderServices() {
-    const wrap = document.getElementById("services-list");
+    const sel = document.getElementById("dos-service");
     try {
       const data = await api("/api/services");
       if (!(data.services || []).length) {
-        wrap.innerHTML = '<p style="color:#64748b">Aucun service disponible.</p>';
+        sel.innerHTML = '<option value="">— Aucun service disponible —</option>';
         return;
       }
-      wrap.innerHTML = data.services
-        .map((s) => {
-          const subs = (s.subservices || [])
-            .map(
-              (ss) => `<div class="svc-row svc-sub">
-              <div>
-                <strong>${escapeHtml(ss.title)}</strong>
-                <p>${escapeHtml(ss.short_desc)}</p>
-              </div>
-              <button class="btn btn-sm" onclick="BalanceClient.selectService(${ss.id}, '${escapeHtml(ss.title).replace(/'/g, "\\'")}')">Ouvrir dossier</button>
-            </div>`,
-            )
-            .join("");
-          return `<div class="svc-group">
-            <div class="svc-row">
-              <div>
-                <strong>${escapeHtml(s.title)}</strong>
-                <p>${escapeHtml(s.short_desc)}</p>
-              </div>
-              <button class="btn" onclick="BalanceClient.selectService(${s.id}, '${escapeHtml(s.title).replace(/'/g, "\\'")}')">Ouvrir dossier</button>
-            </div>
-            ${subs}
-          </div>`;
-        })
-        .join("");
+      sel.innerHTML =
+        `<option value="">— Choisir un service —</option>` +
+        data.services
+          .map((s) => {
+            const subs = (s.subservices || [])
+              .map((ss) => `<option value="${ss.id}">${escapeHtml(ss.title)}</option>`)
+              .join("");
+            const root = `<option value="${s.id}">${escapeHtml(s.title)} (racine)</option>`;
+            return `<optgroup label="${escapeHtml(s.title)}">${subs ? subs + root : root}</optgroup>`;
+          })
+          .join("");
     } catch (e) {
-      wrap.innerHTML = `<p style="color:#b91c1c">${e.message}</p>`;
+      sel.innerHTML = '<option value="">Erreur de chargement</option>';
     }
   }
 
-  function selectService(id, title) {
-    selectedService = id;
-    document.getElementById("dos-service-label").textContent = `Service : ${title}`;
-    document.getElementById("dossier-form").style.display = "";
-    document.getElementById("dos-description").focus();
-  }
-
-  function cancelDossier() {
-    selectedService = null;
-    document.getElementById("dossier-form").style.display = "none";
+  function resetDossier() {
+    document.getElementById("dos-service").value = "";
     document.getElementById("dos-description").value = "";
     document.getElementById("dos-service-note").value = "";
   }
 
   async function openDossier() {
+    const serviceId = document.getElementById("dos-service").value;
     const desc = document.getElementById("dos-description").value.trim();
-    if (!selectedService || !desc) {
+    if (!serviceId || !desc) {
       showAlert("dashboard-alert", "error", "Choisissez un service et décrivez votre besoin.");
       return;
     }
@@ -400,13 +378,13 @@ const BalanceClient = (() => {
       const data = await api("/api/client/dossiers", {
         method: "POST",
         body: JSON.stringify({
-          type_service: selectedService,
+          type_service: parseInt(serviceId, 10),
           description: desc,
           service_note: document.getElementById("dos-service-note").value.trim(),
         }),
       });
       showAlert("dashboard-alert", "success", data.message);
-      cancelDossier();
+      resetDossier();
       api("/api/client/dashboard")
         .then((d) => renderSuivis(d.suivis || []))
         .catch(() => {});
@@ -414,6 +392,30 @@ const BalanceClient = (() => {
       showAlert("dashboard-alert", "error", err.message);
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  let autoRefreshTimer = null;
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    autoRefreshTimer = setInterval(async () => {
+      const ae = document.activeElement;
+      if (ae && ["INPUT", "SELECT", "TEXTAREA"].includes(ae.tagName)) return;
+      if (document.getElementById("prefacture-overlay").style.display === "flex") return;
+      if (document.getElementById("dashboard-box").style.display === "none") return;
+      try {
+        const data = await api("/api/client/dashboard");
+        renderDeclarations(data.declarations || []);
+        renderSuivis(data.suivis || []);
+      } catch (e) {}
+    }, 20000);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
     }
   }
 
@@ -505,6 +507,7 @@ const BalanceClient = (() => {
       `Bienvenue ${client.display_name || client.name}${client.matricule_fiscale ? " — Matricule : " + client.matricule_fiscale : ""}`;
     populateProfile(client);
     renderServices();
+    startAutoRefresh();
     loadMessages();
     api("/api/client/dashboard")
       .then((data) => {
@@ -527,5 +530,5 @@ const BalanceClient = (() => {
     }
   });
 
-  return { login, register, logout, openDossier, sendMessage, selectService, cancelDossier, uploadAttachment, deleteAttachment, showPrefacture, closePrefacture, printPrefacture, saveProfile, toggleDossierEdit, saveDossierEdit };
+  return { login, register, logout, openDossier, sendMessage, resetDossier, uploadAttachment, deleteAttachment, showPrefacture, closePrefacture, printPrefacture, saveProfile, toggleDossierEdit, saveDossierEdit };
 })();

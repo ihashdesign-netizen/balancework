@@ -361,7 +361,7 @@ def api_client_dashboard(request):
                 "notes": sf.notes,
                 "tasks": [
                     {"titre": t.titre, "statut": t.get_statut_display(), "date_echeance": t.date_echeance.strftime("%d/%m/%Y") if t.date_echeance else "—"}
-                    for t in sf.dossier_tasks
+                    for t in sf.tasks.all()
                 ],
             }
             for sf in s.service_followups.all()
@@ -638,7 +638,7 @@ TABLES = {
     "types_service": (Service, ["id", "title", "slug", "short_desc", "parent_title"], None),
     "client_service_suivis": (ClientServiceSuivi, ["id", "client_name", "service_title", "montant", "statut_paiement", "statut_service", "date_echeance", "frequence", "commentaire", "service_note"], None),
     "client_messages": (ClientMessage, ["id", "client_name", "direction", "text", "created_at"], None),
-    "dossier_tasks": (DossierTask, ["id", "client_name", "dossier_service", "titre", "statut", "date_echeance", "repetition"], None),
+    "dossier_tasks": (DossierTask, ["id", "client_name", "dossier_service", "followup_title", "titre", "statut", "date_echeance", "repetition"], None),
     "prefactures": (Prefacture, ["id", "client_name", "dossier_service", "numero", "date", "montant_ht", "taux_tva", "montant_ttc", "statut"], None),
     "dossier_attachments": (DossierAttachment, ["id", "client_name", "dossier_service", "original_name", "category", "size", "uploaded_by", "created_at"], None),
     "declarations": (DeclarationFiscale, ["id", "client_name", "type_declaration", "periode", "date_echeance_legale", "statut", "numero_quittance_ou_tej", "montant_a_payer", "notes_collaborateur"], None),
@@ -662,6 +662,16 @@ def api_admin(request, table):
                 queryset = queryset.filter(id=int(q))
             except ValueError:
                 queryset = queryset.none()
+        if table == "dossier_tasks":
+            client_id = request.GET.get("client", "").strip()
+            statut = request.GET.get("statut", "").strip()
+            followup = request.GET.get("followup", "").strip()
+            if client_id.isdigit():
+                queryset = queryset.filter(dossier__client_id=int(client_id))
+            if statut:
+                queryset = queryset.filter(statut=statut)
+            if followup.isdigit():
+                queryset = queryset.filter(service_followup_id=int(followup))
         items = []
         for obj in queryset:
             item = {f: getattr(obj, f, "") for f in fields}
@@ -735,6 +745,10 @@ def _task_payload(t):
         "statut": t.get_statut_display(),
         "date_echeance": t.date_echeance.strftime("%d/%m/%Y") if t.date_echeance else "—",
         "repetition": t.get_repetition_display(),
+        "dossier_id": t.dossier_id,
+        "dossier_service": t.dossier_service,
+        "followup_id": t.followup_id,
+        "followup_title": t.followup_title,
     }
 
 
@@ -805,9 +819,10 @@ def api_admin_detail(request, table, obj_id):
             item["dossier"] = {"id": d["id"], "service": d["service"], "montant": d["montant"], "frequence": d["frequence"], "statut_service": d["statut_service"], "statut_paiement": d["statut_paiement"], "date_echeance": d["date_echeance"], "tasks": d["tasks"]}
         else:
             item["dossier"] = None
+        item["tasks"] = [_task_payload(t) for t in obj.tasks.all()]
         return _json({"ok": True, "item": item})
     if table == "dossier_tasks":
-        obj = DossierTask.objects.filter(pk=obj_id).select_related("dossier__client", "dossier__type_service").first()
+        obj = DossierTask.objects.filter(pk=obj_id).select_related("dossier__client", "dossier__type_service", "service_followup").first()
         if not obj:
             return _json({"ok": False, "error": "Tâche introuvable"}, 404)
         item = {
@@ -818,6 +833,11 @@ def api_admin_detail(request, table, obj_id):
             "statut": obj.get_statut_display(),
             "date_echeance": obj.date_echeance.strftime("%d/%m/%Y") if obj.date_echeance else "—",
             "repetition": obj.get_repetition_display(),
+            "followup": {
+                "id": obj.service_followup.id,
+                "service": obj.service_followup.service_title,
+                "status": obj.service_followup.get_status_display(),
+            } if obj.service_followup else None,
             "dossier": {
                 "id": obj.dossier.id,
                 "service": obj.dossier.service_title,
@@ -963,6 +983,13 @@ def _api_admin_create(request, table):
             dossier = ClientServiceSuivi.objects.get(pk=int(body.get("dossier", 0)))
         except (ValueError, TypeError, ClientServiceSuivi.DoesNotExist):
             return _json({"ok": False, "error": "Dossier introuvable."}, 400)
+        followup = None
+        if (body.get("service_followup") or "").strip().isdigit():
+            followup = ServiceFollowUp.objects.filter(
+                pk=int(body["service_followup"]), dossier_id=dossier.id
+            ).first()
+            if not followup:
+                return _json({"ok": False, "error": "Suivi de service invalide pour ce dossier."}, 400)
         titre = (body.get("titre") or "").strip()
         if not titre:
             return _json({"ok": False, "error": "Titre de la tâche requis."}, 400)
@@ -980,6 +1007,7 @@ def _api_admin_create(request, table):
                 return _json({"ok": False, "error": "Date d'échéance invalide (AAAA-MM-JJ)."}, 400)
         task = DossierTask.objects.create(
             dossier=dossier,
+            service_followup=followup,
             titre=titre,
             description=(body.get("description") or "").strip(),
             statut=statut,
