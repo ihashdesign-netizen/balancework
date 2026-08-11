@@ -986,7 +986,7 @@ def _api_admin_create(request, table):
         followup = None
         if (body.get("service_followup") or "").strip().isdigit():
             followup = ServiceFollowUp.objects.filter(
-                pk=int(body["service_followup"]), dossier_id=dossier.id
+                pk=int(body["service_followup"]), dossier_id=dossier.id, client_id=dossier.client_id
             ).first()
             if not followup:
                 return _json({"ok": False, "error": "Suivi de service invalide pour ce dossier."}, 400)
